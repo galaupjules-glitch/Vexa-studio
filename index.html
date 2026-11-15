@@ -1,0 +1,1614 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Studio Variantes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: control room — studio (stage + captions) left, drop folder + generator right, variant reel below */
+:root{
+  --bg:#111319; --panel:#191C24; --panel-2:#21252F; --line:#2D323E; --line-2:#3A4050;
+  --fg:#ECEEF3; --muted:#959CAC; --faint:#6A7183;
+  --accent:#FFD23F; --accent-ink:#1E1700; --accent-soft:rgba(255,210,63,.12);
+  --danger:#FF6B6B; --ok:#5BD69A;
+  --f-display:"Space Grotesk", "Inter", system-ui, sans-serif;
+  --f-body:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--fg)}
+html,body{margin:0}
+body{font-family:var(--f-body);font-size:14px;line-height:1.45;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:0 48px}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1480px;margin:0 auto}
+
+/* header */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:18px 14px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.brand h1{font-size:22px;font-weight:700}
+.brand h1 span{color:var(--accent)}
+.brand p{margin:0;color:var(--muted);font-size:13px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--panel-2);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:500;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn.danger{color:var(--danger)}
+.icon-btn{appearance:none;border:1px solid var(--line-2);background:var(--panel-2);border-radius:7px;width:30px;height:30px;display:inline-grid;place-items:center;cursor:pointer;font-size:13px;flex:none}
+.icon-btn:hover{border-color:var(--faint)}
+
+/* main grid */
+.main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:1100px){.main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;min-width:0}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--line)}
+.panel-h h2{font-size:15px;font-weight:600}
+.panel-b{padding:16px}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.side{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+/* studio */
+.studio{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:760px){.studio{grid-template-columns:minmax(0,1fr)}}
+.stage-col{display:flex;flex-direction:column;gap:10px;align-items:center}
+.stage-box{position:relative;background:#000;border-radius:12px;overflow:hidden;border:1px solid var(--line);line-height:0}
+#stage{display:block;height:min(68vh,620px);width:auto;max-width:100%}
+#stage.grab{cursor:grab}
+#stage.grabbing{cursor:grabbing}
+@media (max-width:760px){#stage{height:auto;width:100%;max-height:70vh}}
+.transport{display:flex;align-items:center;gap:8px;width:100%}
+.transport input[type=range]{flex:1;min-width:0}
+.tc{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stage-opts{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;font-size:12px;color:var(--muted)}
+.editing{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.editing select{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:6px 8px}
+
+.editor{display:flex;flex-direction:column;gap:14px;min-width:0}
+.style-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2)}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld>span{font-size:11px;color:var(--muted)}
+.fld select,.fld input[type=number],.fld input[type=text]{background:var(--bg);border:1px solid var(--line-2);border-radius:7px;padding:5px 7px;width:100%;min-width:0}
+.chk{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer}
+.chk input{accent-color:var(--accent);width:15px;height:15px}
+input[type=range]{accent-color:var(--accent)}
+input[type=color]{appearance:none;border:1px solid var(--line-2);width:28px;height:24px;padding:0;border-radius:6px;background:none;cursor:pointer}
+input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
+
+.caps{display:flex;flex-direction:column;gap:8px;max-height:min(62vh,600px);overflow:auto;padding-right:2px}
+.cap{border:1px solid var(--line);border-radius:var(--r);padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
+.cap.on{border-color:var(--line-2);background:#1D212A}
+.cap.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.cap textarea{width:100%;resize:vertical;min-height:38px;background:var(--bg);border:1px solid var(--line-2);border-radius:7px;padding:7px 9px;line-height:1.35}
+.cap-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.time{display:flex;align-items:center;gap:4px}
+.time input{width:64px;background:var(--bg);border:1px solid var(--line-2);border-radius:6px;padding:4px 5px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.time .lbl{font-size:11px;color:var(--muted)}
+.mini{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.mini input[type=range]{width:72px}
+.cap-n{font-family:var(--f-mono);font-size:11px;color:var(--faint);margin-right:auto}
+.hint{font-size:12px;color:var(--muted)}
+.hint code{font-family:var(--f-mono);color:var(--accent);font-size:11.5px}
+
+/* drop folder */
+.drops{display:grid;gap:10px}
+.drop{border:1.5px dashed var(--line-2);border-radius:12px;padding:12px;display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;position:relative;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop.filled{border-style:solid;border-color:var(--line)}
+.drop .thumb{width:72px;aspect-ratio:9/16;border-radius:8px;background:var(--panel-2);display:grid;place-items:center;overflow:hidden;color:var(--faint);font-size:20px}
+.drop .thumb video{width:100%;height:100%;object-fit:cover;display:block}
+.drop h3{font-size:13.5px;font-weight:600}
+.drop .meta{font-family:var(--f-mono);font-size:11px;color:var(--muted);margin-top:2px;word-break:break-all}
+.drop .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:var(--panel-2);color:var(--muted);margin-left:6px;vertical-align:1px}
+.tag.y{background:var(--accent-soft);color:var(--accent)}
+.note{font-size:12px;color:var(--muted);padding:9px 11px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line)}
+.note.warn{color:#FFC9A8;border-color:#5A3A2A;background:#2A1E18}
+.note.ok{color:#BFF0D6;border-color:#285040;background:#16261F}
+
+/* generator */
+.gen{display:flex;flex-direction:column;gap:10px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2)}
+.opt .desc{grid-column:1/-1;font-size:11.5px;color:var(--muted)}
+.opt .amt{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);font-family:var(--f-mono)}
+.opt .amt input{width:90px}
+.count{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.count input{width:70px;background:var(--bg);border:1px solid var(--line-2);border-radius:8px;padding:7px 8px;font-family:var(--f-mono);font-size:15px;text-align:center}
+
+/* variants */
+.reel{margin-top:18px}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.vcard{border:1px solid var(--line);border-radius:12px;background:var(--panel-2);display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.vcard.sel{border-color:var(--accent)}
+.vtop{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;padding:12px}
+.vthumb{width:110px;border-radius:8px;background:#000;display:block;cursor:pointer}
+.vname{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.vname h3{font-size:14px;font-weight:600}
+.vname h3{min-width:0}.vsrc{display:block;font:500 10.5px var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vname h3 b{font-family:var(--f-mono);font-weight:500;color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.chip{font-size:10.5px;padding:2px 7px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted);max-width:100%;overflow-wrap:anywhere;display:inline-flex;align-items:center;gap:4px}
+.chip i{width:8px;height:8px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.3)}
+.vtexts{display:flex;flex-direction:column;gap:5px;padding:0 12px 10px;max-height:170px;overflow:auto}
+.vtexts textarea{width:100%;resize:none;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:12px;line-height:1.3;min-height:28px;field-sizing:content}
+.vfoot{display:flex;gap:6px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);margin-top:auto;flex-wrap:wrap}
+.vfoot .sp{flex:1}
+.prog{height:3px;background:var(--line);position:relative}
+.prog>i{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0}
+.status{font-size:11px;color:var(--muted);font-family:var(--f-mono)}
+.status.ok{color:var(--ok)}
+.empty{border:1.5px dashed var(--line-2);border-radius:12px;padding:28px;text-align:center;color:var(--muted)}
+.empty b{color:var(--fg)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--line-2);padding:10px 16px;border-radius:10px;font-size:13px;z-index:50;max-width:min(560px,calc(100vw - 32px));box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.export-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.export-bar select{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:6px 8px;font-size:12.5px}
+.bigprog{width:160px;height:6px;background:var(--line);border-radius:99px;overflow:hidden}
+.bigprog>i{display:block;height:100%;width:0;background:var(--accent)}
+.dsec{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,background .15s}
+.dsec.over{border-color:var(--accent);background:var(--accent-soft)}
+.dsec-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.dsec-h h3{font-size:13.5px;font-weight:600}
+.dsec-h .meta{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.src-list{display:flex;flex-direction:column;gap:6px}
+.src-list:empty{display:none}
+.src-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px;border-radius:9px;background:var(--panel-2)}
+.src-th{position:relative;width:44px;aspect-ratio:9/16;border-radius:6px;overflow:hidden;background:#000}
+.src-th video{width:100%;height:100%;object-fit:cover;display:block}
+.src-th span{position:absolute;left:3px;top:3px;background:var(--accent);color:var(--accent-ink);font:700 10px var(--f-mono);padding:1px 4px;border-radius:4px}
+.src-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-row .meta{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.src-acts{display:flex;gap:4px}
+.ex-st{font-size:11.5px;color:var(--muted);margin-top:3px}
+.ex-st.done{color:var(--ok)}.ex-st.error{color:var(--danger)}.ex-st.reading,.ex-st.queued{color:var(--accent)}
+.src-row .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.src-row .acts:empty{display:none}
+.addzone{appearance:none;border:1.5px dashed var(--line-2);background:transparent;border-radius:10px;padding:12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;width:100%}
+.addzone:hover{border-color:var(--accent)}
+.addzone b{font-size:13px}.addzone span{font-size:11.5px;color:var(--muted)}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.opt-auto{padding:10px 12px;border:1px solid var(--accent);border-radius:var(--r);background:var(--accent-soft);font-size:12.5px}
+
+#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:default}
+#overlay.picking{cursor:crosshair}
+.stage-empty{width:min(300px,70vw);aspect-ratio:9/16;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:14px;line-height:1.5;background:var(--panel-2)}
+.flow{list-style:none;margin:0 0 18px;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;counter-reset:f}
+.flow li{counter-increment:f;border:1px solid var(--line);border-radius:12px;padding:10px 14px 10px 44px;position:relative;background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.flow li::before{content:counter(f);position:absolute;left:12px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line-2);display:grid;place-items:center;font:600 12px var(--f-mono);color:var(--muted)}
+.flow li:last-child::before{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.flow b{font-family:var(--f-display);font-size:14px}.flow span{font-size:12px;color:var(--muted)}
+@media (max-width:640px){.flow{grid-template-columns:minmax(0,1fr)}}
+.palette{display:flex;flex-wrap:wrap;gap:6px}
+.pchip{appearance:none;border:1px solid var(--line-2);background:var(--panel-2);border-radius:999px;padding:4px 10px 4px 6px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.pchip i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.35)}
+.pchip.off{opacity:.38;text-decoration:line-through}
+.cap-text{width:100%;background:var(--bg);border:1px solid var(--line-2);border-radius:7px;padding:6px 9px}
+.cap-label{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.src-row.cur{outline:1px solid var(--accent)}
+.icon-btn.sm{width:24px;height:24px;font-size:11px}
+.caps{max-height:min(56vh,560px)}
+.drive-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)}
+.drive-bar-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.drive-bar.warn{border-color:#7a4a2a;background:#2a1e18}
+.drive-bar.warn .hint{color:#FFC9A8}
+.gbtn{background:#fff;color:#1f1f1f;border-color:#dadce0}.gbtn.on{background:var(--panel-2);color:var(--ok);border-color:#285040}
+.drive-bar-txt b{font-size:14px;color:var(--accent);overflow-wrap:anywhere}
+.dlg{position:fixed;inset:0;z-index:60;background:rgba(5,6,10,.66);display:grid;place-items:center;padding:16px}
+.dlg-box{width:min(460px,100%);max-height:min(640px,calc(100vh - 32px));display:flex;flex-direction:column;gap:10px;background:var(--panel);border:1px solid var(--line-2);border-radius:16px;padding:18px}
+.dlg-box h3{font-size:17px}
+.dlg-crumb{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.dlg-crumb a{color:var(--fg)}
+.dlg-list{flex:1;min-height:120px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:6px;display:flex;flex-direction:column;gap:2px}
+.dlg-dir{appearance:none;text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:9px 10px;cursor:pointer;font-size:13.5px}
+.dlg-dir:hover{border-color:var(--line-2);background:var(--panel-2)}
+.dlg-row{display:flex;gap:8px;flex-wrap:wrap}
+.dlg-row input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line-2);border-radius:8px;padding:7px 9px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Studio <span>Variantes</span></h1>
+      <p>Tes variantes 1, copiées à l’identique. Seule la couleur du texte change.</p>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="btnOpen" type="button">Ouvrir un projet</button>
+      <button class="btn" id="btnSave" type="button">Enregistrer le projet (.json)</button>
+      <button class="btn ghost" id="btnSettings" type="button">⚙ Réglages</button>
+      <input type="file" id="fileProject" accept=".json,application/json" hidden>
+    </div>
+  </header>
+
+  <ol class="flow" aria-label="Étapes">
+    <li><b>Originales</b><span>Le décor, en référence</span></li>
+    <li><b>Variantes 1</b><span>Tes montages avec texte</span></li>
+    <li><b>Variantes 2</b><span>Mêmes vidéos, autres couleurs de texte</span></li>
+  </ol>
+
+  <div class="main">
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Studio</h2>
+        <div class="editing">
+          <span class="eyebrow">Tu regardes</span>
+          <select id="selItem" aria-label="Vidéo affichée"></select>
+        </div>
+      </div>
+      <div class="panel-b studio">
+        <div class="stage-col">
+          <div class="stage-box" id="stageBox">
+            <canvas id="stage" width="1080" height="1920"></canvas>
+            <canvas id="overlay" width="1080" height="1920"></canvas>
+            <div class="stage-empty" id="stageEmpty">Ajoute tes variantes 1<br>dans le Dépôt</div>
+          </div>
+          <div class="transport">
+            <button class="icon-btn" id="btnPlay" type="button" aria-label="Lecture">▶</button>
+            <input type="range" id="scrub" min="0" max="1" step="0.01" value="0" aria-label="Position">
+            <span class="tc" id="tc">00:00.00 / 00:00.00</span>
+          </div>
+          <div class="stage-opts">
+            <label class="chk"><input type="checkbox" id="optBoxes"> Zones de texte</label>
+            <label class="chk"><input type="checkbox" id="optCompare"> Comparer avec la variante 1</label>
+            <label class="chk"><input type="checkbox" id="optMute" checked> Son coupé</label>
+          </div>
+        </div>
+        <div class="editor" id="editor"></div>
+      </div>
+    </section>
+
+    <div class="side">
+      <section class="panel">
+        <div class="panel-h"><h2>Dépôt</h2><span class="eyebrow">Sources</span></div>
+        <div class="panel-b drops" id="drops"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-h"><h2>Générateur</h2><span class="eyebrow">Variantes 2</span></div>
+        <div class="panel-b gen">
+          <div class="count">
+            <label for="genCount" class="eyebrow">Nombre de variantes 2 (total)</label>
+            <input type="number" id="genCount" min="1" max="60" value="10">
+            <button class="btn primary" id="btnGen" type="button">Générer 10 variantes au total</button>
+          </div>
+          <p class="hint" style="margin:0">Le total est réparti entre toutes tes variantes 1. Chaque variante 2 est ta variante 1 à l’identique (montage, son, texte, police, place) avec une autre couleur de texte. À chaque clic, les variantes non retouchées sont remplacées.</p>
+          <label class="chk opt-auto"><input type="checkbox" id="optAuto" checked> Créer les variantes 2 automatiquement dès que Claude a lu tes variantes 1</label>
+          <div>
+            <div class="eyebrow" style="margin-bottom:6px">Couleurs utilisées</div>
+            <div class="palette" id="palette"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel reel">
+    <div class="panel-h">
+      <h2 id="reelTitle">Variantes 2</h2>
+      <div class="export-bar">
+        <label class="fld" style="flex-direction:row;align-items:center;gap:6px"><span>Qualité</span>
+          <select id="selQuality">
+            <option value="source">Maximale (recommandée)</option>
+            <option value="high">Haute (20 Mbit/s)</option>
+            <option value="light">Légère (8 Mbit/s)</option>
+          </select></label>
+        <label class="fld" style="flex-direction:row;align-items:center;gap:6px"><span>Images/s</span>
+          <select id="selFps"><option value="auto">Comme la source</option><option value="30">30</option><option value="60">60</option></select></label>
+        <label class="fld" style="flex-direction:row;align-items:center;gap:6px"><span>En même temps</span>
+          <select id="selPar"><option value="3" selected>3 (recommandé)</option><option value="5">5</option><option value="10">10</option><option value="1">1</option></select></label>
+        <span class="tc" id="fmtInfo"></span>
+        <div class="bigprog" id="bigprog" hidden><i></i></div>
+        <button class="btn" id="btnCancel" type="button" hidden>Annuler</button>
+        <button class="btn primary" id="btnExportAll" type="button">Exporter dans mon Drive</button>
+        <button class="btn ghost danger" id="btnClear" type="button">Tout effacer</button>
+      </div>
+    </div>
+    <div class="panel-b">
+      <div class="drive-bar" id="driveBar">
+        <div class="drive-bar-txt"><span class="eyebrow">Export direct dans ton Google Drive</span><b id="driveFolderLbl">Dossier : non choisi</b><span class="hint" id="driveStateLbl">Connecte ton Google Drive, choisis le dossier, puis « Exporter dans mon Drive » : les vidéos y partent directement, en qualité maximale.</span></div>
+        <div class="row">
+          <button class="btn gbtn" id="btnGoogle" type="button"><svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg><span id="gLbl">Se connecter avec Google</span></button>
+          <button class="btn" id="btnPickFolder" type="button">Choisir le dossier…</button>
+        </div>
+      </div>
+      <div class="vgrid" id="vgrid"></div>
+    </div>
+  </section>
+</div>
+<div class="dlg" id="driveDlg" hidden>
+  <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="driveDlgTitle">
+    <div class="row" style="justify-content:space-between"><h3 id="driveDlgTitle">Dans quel dossier de ton Drive ?</h3><button class="icon-btn" id="driveDlgClose" type="button" aria-label="Fermer">✕</button></div>
+    <p class="hint" id="driveDlgMsg" style="margin:0"></p>
+    <div class="dlg-crumb" id="driveCrumb"></div>
+    <div class="dlg-list" id="driveList"></div>
+    <div class="dlg-row" id="driveNewRow"><input id="driveNewName" type="text" placeholder="Nouveau dossier ici" aria-label="Nom du nouveau dossier"><button class="btn sm" id="driveNewBtn" type="button">Créer</button></div>
+    <button class="btn primary" id="driveChooseBtn" type="button">Déposer ici</button>
+  </div>
+</div>
+<div class="dlg" id="setDlg" hidden>
+  <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois)</h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
+    <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
+    <label class="fld"><span>Clé API Google (sélecteur de dossier + Gemini)</span><input type="text" id="setKey" autocomplete="off"></label>
+    <label class="fld"><span>Modèle Gemini pour lire le texte</span><input type="text" id="setModel" autocomplete="off"></label>
+    <button class="btn primary" id="setSave" type="button">Enregistrer</button>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="fileAny" hidden>
+<canvas id="thumbGL" width="270" height="480" hidden></canvas>
+
+<script>
+/* Hors de claude.ai : lecture du texte par Gemini (offre gratuite de Google), téléchargements normaux. */
+(() => {
+  const get = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+  window.VX_CFG = Object.assign({ clientId: "", apiKey: "", model: "gemini-2.5-flash" }, get("vx-web-cfg", {}));
+  const b64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
+  const gemini = {
+    limits: async () => ({ images: { maxCount: 16 } }),
+    json: async (prompt, opts = {}) => {
+      const cfg = window.VX_CFG;
+      if (!cfg.apiKey) throw { code: "not_granted", message: "Clé API Google manquante (⚙ Réglages)." };
+      const parts = [{ text: prompt }];
+      for (const im of opts.images || []) parts.push({ inline_data: { mime_type: im.type || "image/jpeg", data: await b64(im) } });
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || "gemini-2.5-flash")}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseMimeType: "application/json", temperature: 0.1 } })
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.status === 429) throw { code: "rate_limited", message: "Quota gratuit de Gemini atteint pour le moment : réessaie dans une minute." };
+      if (!r.ok) throw { code: "upstream_error", message: "Gemini : " + ((body.error && body.error.message) || r.status) };
+      const txt = ((((body.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("");
+      try { return JSON.parse(txt); } catch (e) { const m = txt.match(/[\[{][\s\S]*[\]}]/); if (m) return JSON.parse(m[0]); throw { code: "invalid_json", message: "Réponse illisible de Gemini." }; }
+    }
+  };
+  const downloads = { save: async ({ filename, data }) => { const blob = data instanceof Blob ? data : new Blob([data]); const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000); return { status: "saved" }; } };
+  window.claude = { use: async n => n === "sample" ? (window.VX_CFG.apiKey ? gemini : null) : n === "downloads" ? downloads : null };
+})();
+</script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<script src="https://apis.google.com/js/api.js" async></script>
+<script>
+(() => {
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2, 9);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const once = (el, ev, ms = 20000) => new Promise((res, rej) => {
+  const t = setTimeout(() => { el.removeEventListener(ev, h); rej(new Error("timeout " + ev)); }, ms);
+  const h = e => { clearTimeout(t); el.removeEventListener(ev, h); res(e); };
+  el.addEventListener(ev, h);
+});
+const fmt = t => { t = Math.max(0, t || 0); const m = Math.floor(t / 60), s = t - m * 60; return String(m).padStart(2, "0") + ":" + s.toFixed(2).padStart(5, "0"); };
+const fmtSize = b => b > 1e6 ? (b / 1e6).toFixed(1).replace(".", ",") + " Mo" : Math.round(b / 1e3) + " Ko";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const hex = (h, d) => /^#[0-9a-f]{6}$/i.test(h || "") ? h.toUpperCase() : d;
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+const lum = h => { const [r, g, b] = rgb(h); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const cdist = (a, b) => { const A = rgb(a), B = rgb(b); return 255 * Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]); };
+const toHex = (r, g, b) => "#" + [r, g, b].map(v => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, "0")).join("").toUpperCase();
+function hsl(h, s, l) { s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l); const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return toHex(255 * f(0), 255 * f(8), 255 * f(4)); }
+
+/* ---------- palette ---------- */
+const PAL = [
+  { n: "Jaune", fill: "#FFE14D", hl: "#FFFFFF" },
+  { n: "Cyan", fill: "#5CE1FF", hl: "#FFFFFF" },
+  { n: "Rose", fill: "#FF6FB5", hl: "#FFFFFF" },
+  { n: "Vert", fill: "#5CF08F", hl: "#FFFFFF" },
+  { n: "Orange", fill: "#FF9A3D", hl: "#FFFFFF" },
+  { n: "Violet", fill: "#B48CFF", hl: "#FFFFFF" },
+  { n: "Rouge", fill: "#FF4D4D", hl: "#FFFFFF" },
+  { n: "Lime", fill: "#D8FF5C", hl: "#FFFFFF" },
+  { n: "Bleu", fill: "#4D8BFF", hl: "#FFFFFF" },
+  { n: "Pêche", fill: "#FFB38A", hl: "#FFFFFF" },
+  { n: "Menthe", fill: "#A6FFE0", hl: "#FFFFFF" },
+  { n: "Blanc", fill: "#FFFFFF", hl: "#FFE14D" },
+  { n: "Noir", fill: "#111111", hl: "#E5007A" }
+];
+const HL_ALT = ["#FFFFFF", "#FFE14D", "#111111"];
+
+/* ---------- state ---------- */
+const S = { clips: [], examples: [], variants: [], selected: null, selCap: null, settings: { count: 10, auto: true, off: [] }, counter: 1 };
+const LS = "studio-variantes-v3";
+try { const o = JSON.parse(localStorage.getItem(LS) || "null"); if (o && o.settings) Object.assign(S.settings, o.settings); } catch (e) { }
+const saveSettings = () => { try { localStorage.setItem(LS, JSON.stringify({ settings: S.settings })); } catch (e) { } };
+const exById = id => S.examples.find(x => x.id === id);
+const exOf = item => item ? (item.exId ? exById(item.exId) : item) : null;
+const isVariant = item => !!(item && item.exId);
+function current() { return S.variants.find(v => v.id === S.selected) || S.examples.find(x => x.id === S.selected) || null; }
+
+/* ---------- recolor renderer (WebGL) ---------- */
+const VS = "attribute vec2 a;varying vec2 uv;void main(){uv=vec2(a.x*0.5+0.5,0.5-a.y*0.5);gl_Position=vec4(a,0.,1.);}";
+const FS = `precision highp float;varying vec2 uv;uniform sampler2D tex;uniform int n;
+uniform vec4 box[8];uniform vec3 S[8];uniform vec3 F[8];uniform vec3 N[8];uniform vec3 H[8];uniform vec3 HN[8];uniform float hasH[8];uniform float tol[8];uniform float rad[8];uniform float asp;
+vec4 rc(vec3 p,vec3 s,vec3 f,vec3 nn,float tl){vec3 d=f-s;float L=dot(d,d);if(L<0.02)return vec4(p,0.);float t=clamp(dot(p-s,d)/L,0.,1.);float dist=length(p-(s+t*d));
+float w=(1.-smoothstep(tl*0.5,tl,dist))*smoothstep(0.42,0.85,t);return vec4(clamp(p+w*t*(nn-f),0.,1.),w);}
+void main(){vec3 p=texture2D(tex,uv).rgb;vec3 o=p;
+for(int i=0;i<8;i++){if(i>=n)break;vec4 b=box[i];if(uv.x<b.x||uv.x>b.z||uv.y<b.y||uv.y>b.w)continue;
+vec4 a=rc(p,S[i],F[i],N[i],tol[i]);if(hasH[i]>0.5){vec4 c=rc(p,S[i],H[i],HN[i],tol[i]);if(c.w>a.w)a=c;}
+if(a.w>0.&&rad[i]>0.){float near=0.;for(int k=0;k<8;k++){float ang=float(k)*0.7853982;vec2 dir=vec2(cos(ang)*asp,sin(ang));
+for(int j=1;j<=4;j++){vec3 q=texture2D(tex,uv+dir*rad[i]*float(j)*0.25).rgb;if(length(q-S[i])<0.3)near=1.;}}if(near<0.5)a.w=0.;}
+if(a.w>0.)o=a.rgb;}
+gl_FragColor=vec4(o,1.);}`;
+function makeRenderer(canvas) {
+  const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, alpha: false, antialias: false, premultipliedAlpha: false });
+  if (!gl) return null;
+  const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(p); gl.useProgram(p);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const al = gl.getAttribLocation(p, "a"); gl.enableVertexAttribArray(al); gl.vertexAttribPointer(al, 2, gl.FLOAT, false, 0, 0);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  [[gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE], [gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR]].forEach(([k, v]) => gl.texParameteri(gl.TEXTURE_2D, k, v));
+  const U = {}; ["n", "box", "S", "F", "N", "H", "HN", "hasH", "tol", "rad", "asp", "tex"].forEach(k => U[k] = gl.getUniformLocation(p, k));
+  gl.uniform1i(U.tex, 0);
+  return {
+    draw(src, items) {
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); } catch (e) { return; }
+      const k = Math.min(8, items.length), A = (sz) => new Float32Array(8 * sz);
+      const box = A(4), Sx = A(3), Fx = A(3), Nx = A(3), Hx = A(3), HNx = A(3), hh = new Float32Array(8), tl = new Float32Array(8), rd = new Float32Array(8);
+      for (let i = 0; i < k; i++) {
+        const it = items[i]; box.set(it.box, i * 4);
+        Sx.set(rgb(it.S), i * 3); Fx.set(rgb(it.F), i * 3); Nx.set(rgb(it.N), i * 3); Hx.set(rgb(it.H), i * 3); HNx.set(rgb(it.HN), i * 3);
+        hh[i] = it.hasH ? 1 : 0; tl[i] = it.tol; rd[i] = it.rad || 0;
+      }
+      gl.uniform1i(U.n, k); gl.uniform4fv(U.box, box); gl.uniform3fv(U.S, Sx); gl.uniform3fv(U.F, Fx); gl.uniform3fv(U.N, Nx); gl.uniform3fv(U.H, Hx); gl.uniform3fv(U.HN, HNx); gl.uniform1fv(U.hasH, hh); gl.uniform1fv(U.tol, tl); gl.uniform1fv(U.rad, rd); gl.uniform1f(U.asp, canvas.height / canvas.width);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+  };
+}
+const PAD_T = 0.35;
+const hasHl = c => cdist(c.hl, c.color) > 60;
+const strokeOf = c => c.stroke || (lum(c.color) > 0.5 ? "#000000" : "#FFFFFF");
+function altOf(v, orig) { const cands = [v.hl, ...PAL.map(p => p.fill)]; return cands.find(x => cdist(x, orig) > 90 && cdist(x, v.fill) > 90) || v.hl; }
+function colorsFor(v, c) {
+  const o = (v.per && v.per[c.id]) || {};
+  let fill = o.fill || v.fill; if (!o.fill && cdist(fill, c.color) < 70) fill = altOf(v, c.color);
+  let hl = o.hl || (hasHl(c) ? v.hl : fill); if (!o.hl && hasHl(c) && cdist(hl, c.hl) < 70) hl = altOf(v, c.hl);
+  return { fill, hl };
+}
+function recolorItems(ex, v, t, test) {
+  if (!ex || !ex.result || (!v && !test)) return [];
+  const out = [];
+  for (const c of ex.result.captions) {
+    if (t < c.start - PAD_T || t > c.end + PAD_T) continue;
+    const col = v ? colorsFor(v, c) : { fill: "#FF2BD6", hl: "#2BFFF0" };
+    const m = 0.008 + (Math.abs(c.rot || 0) > 1 ? 0.02 : 0);
+    const lineH = Math.min(c.box[3] - c.box[1], 0.045);
+    out.push({ rad: c.stroke ? lineH * 0.45 : 0, box: [c.box[0] - m, c.box[1] - m * 0.7, c.box[2] + m, c.box[3] + m * 0.7], S: strokeOf(c), F: c.color, N: col.fill, H: c.hl, HN: col.hl, hasH: hasHl(c), tol: ex.tol || 0.22 });
+  }
+  return out;
+}
+
+/* ---------- stage ---------- */
+const stage = $("#stage"), overlay = $("#overlay"), octx = overlay.getContext("2d", { willReadFrequently: true });
+let R = null; try { R = makeRenderer(stage); } catch (e) { R = null; }
+// Si Chrome coupe le moteur d'affichage de l'aperçu (trop de contextes WebGL), on le relance.
+stage.addEventListener("webglcontextlost", e => { e.preventDefault(); R = null; });
+stage.addEventListener("webglcontextrestored", () => { try { R = makeRenderer(stage); } catch (e) { R = null; } dirty = true; });
+// Un seul moteur pour tous les exports (au lieu d'un nouveau par vidéo, que Chrome finit par couper).
+// Un moteur neuf par vidéo exportée, fermé dès la fin (Chrome refuse de réenregistrer un même moteur,
+// et garder les anciens ouverts finit par couper celui de l'aperçu).
+function exportRenderer(W, H) {
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const r = makeRenderer(cv); if (!r) throw new Error("WebGL indisponible dans ce navigateur.");
+  const release = () => { try { const g = cv.getContext("webgl"); const x = g && g.getExtension("WEBGL_lose_context"); if (x) x.loseContext(); } catch (e) { } cv.width = cv.height = 1; };
+  return { cv, r, release };
+}
+let dirty = true, playing = false;
+const curEx = () => exOf(current());
+const curEl = () => { const ex = curEx(); return ex && ex.el; };
+function setStageSize() {
+  const ex = curEx(); const w = ex ? ex.w : 1080, h = ex ? ex.h : 1920;
+  if (stage.width !== w || stage.height !== h) { stage.width = w; stage.height = h; overlay.width = w; overlay.height = h; }
+  $("#stageEmpty").hidden = !!(ex && ex.url); stage.hidden = overlay.hidden = !(ex && ex.url);
+  dirty = true;
+}
+function renderStage() {
+  const it = current(), ex = exOf(it), v = curEl();
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  if (!ex || !v) { $("#tc").textContent = "00:00.00 / 00:00.00"; return; }
+  const t = v.currentTime || 0;
+  if (!R && stage.getContext("webgl") && !stage.getContext("webgl").isContextLost()) { try { R = makeRenderer(stage); } catch (e) { R = null; } }
+  if (v.readyState >= 2 && R) {
+    const showOrig = isVariant(it) && $("#optCompare").checked;
+    R.draw(v, showOrig ? [] : recolorItems(ex, isVariant(it) ? it : null, t, !isVariant(it) && ex.test));
+  }
+  const showBoxes = !isVariant(it) || $("#optBoxes").checked;
+  overlay.style.opacity = showBoxes ? "1" : "0";
+  if (showBoxes) drawBoxes(ex, t);
+  $("#scrub").max = (ex.dur || 1).toFixed(2); $("#scrub").value = t.toFixed(2);
+  $("#tc").textContent = fmt(t) + " / " + fmt(ex.dur);
+  $("#btnPlay").textContent = playing ? "❚❚" : "▶";
+  markRows(t);
+}
+function drawBoxes(ex, t) {
+  if (!ex.result) return;
+  const W = overlay.width, H = overlay.height, lw = Math.max(2, W / 360);
+  for (const c of ex.result.captions) {
+    const on = t >= c.start - PAD_T && t <= c.end + PAD_T; if (!on && S.selCap !== c.id) continue;
+    const sel = S.selCap === c.id;
+    const x = c.box[0] * W, y = c.box[1] * H, w = (c.box[2] - c.box[0]) * W, h = (c.box[3] - c.box[1]) * H;
+    octx.setLineDash(sel ? [] : [W / 80, W / 120]); octx.lineWidth = lw;
+    octx.strokeStyle = sel ? "#FFD23F" : on ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.35)";
+    octx.strokeRect(x, y, w, h);
+    if (sel) { const k = W / 40; octx.fillStyle = "#FFD23F"; octx.fillRect(x + w - k / 2, y + h - k / 2, k, k); }
+  }
+  octx.setLineDash([]);
+}
+function tick() { if (dirty || playing) { renderStage(); dirty = false; } requestAnimationFrame(tick); }
+requestAnimationFrame(tick);
+function stopAll() { S.examples.forEach(x => x.el && x.el.pause()); playing = false; }
+$("#btnPlay").onclick = () => {
+  const v = curEl(); if (!v) return;
+  if (playing) { v.pause(); playing = false; }
+  else { v.muted = $("#optMute").checked; v.play().then(() => playing = true).catch(() => { v.muted = true; $("#optMute").checked = true; v.play().then(() => playing = true).catch(() => { }); }); }
+  dirty = true;
+};
+$("#optMute").onchange = e => S.examples.forEach(x => x.el && (x.el.muted = e.target.checked));
+["optBoxes", "optCompare"].forEach(id => $("#" + id).onchange = () => dirty = true);
+$("#scrub").oninput = e => { const v = curEl(); if (v) { v.currentTime = +e.target.value; dirty = true; } };
+function seek(t) { const v = curEl(); if (v) { v.currentTime = clamp(t, 0, v.duration || 0); dirty = true; } }
+
+/* overlay: move / resize zones, color picker */
+let drag = null, pick = null;
+const sample = document.createElement("canvas"), sctx = sample.getContext("2d", { willReadFrequently: true });
+function ptFrac(e) { const r = overlay.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; }
+overlay.addEventListener("pointerdown", e => {
+  const it = current(), ex = exOf(it); if (!ex || !ex.result) return;
+  const p = ptFrac(e);
+  if (pick) {
+    const v = ex.el; sample.width = v.videoWidth; sample.height = v.videoHeight; sctx.drawImage(v, 0, 0);
+    const x = Math.round(p.x * sample.width), y = Math.round(p.y * sample.height);
+    const d = sctx.getImageData(clamp(x - 1, 0, sample.width - 3), clamp(y - 1, 0, sample.height - 3), 3, 3).data;
+    let r = 0, g = 0, b = 0; for (let i = 0; i < 36; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    const c = ex.result.captions.find(k => k.id === pick.cap); if (c) { c[pick.f] = toHex(r / 9, g / 9, b / 9); exChanged(ex); renderEditor(); }
+    pick = null; overlay.classList.remove("picking"); toast("Couleur prise sur la vidéo."); return;
+  }
+  if (isVariant(it) && !$("#optBoxes").checked) return;
+  const t = ex.el ? ex.el.currentTime : 0;
+  const cands = ex.result.captions.filter(c => (t >= c.start - PAD_T && t <= c.end + PAD_T) || c.id === S.selCap);
+  const k = 0.03;
+  for (const c of cands.reverse()) {
+    const [l, tp, r, b] = c.box;
+    if (Math.abs(p.x - r) < k && Math.abs(p.y - b) < k * 0.6) { drag = { c, mode: "size" }; break; }
+    if (p.x >= l && p.x <= r && p.y >= tp && p.y <= b) { drag = { c, mode: "move", ox: p.x - l, oy: p.y - tp }; break; }
+  }
+  if (drag) { S.selCap = drag.c.id; overlay.setPointerCapture(e.pointerId); renderSelRows(true); }
+  else { S.selCap = null; renderSelRows(); }
+  dirty = true;
+});
+overlay.addEventListener("pointermove", e => {
+  if (!drag) return; const p = ptFrac(e), b = drag.c.box;
+  if (drag.mode === "move") { const w = b[2] - b[0], h = b[3] - b[1]; const l = clamp(p.x - drag.ox, 0, 1 - w), t = clamp(p.y - drag.oy, 0, 1 - h); drag.c.box = [l, t, l + w, t + h]; }
+  else drag.c.box = [b[0], b[1], clamp(p.x, b[0] + 0.02, 1), clamp(p.y, b[1] + 0.01, 1)];
+  dirty = true;
+});
+const endDrag = () => { if (drag) { drag = null; exChanged(curEx()); } };
+overlay.addEventListener("pointerup", endDrag); overlay.addEventListener("pointercancel", endDrag);
+
+/* ---------- studio editor ---------- */
+function renderItemSelect() {
+  const sel = $("#selItem"), exs = S.examples.filter(x => x.url);
+  if (!exs.length && !S.variants.length) { sel.innerHTML = `<option value="">Rien pour l’instant</option>`; return; }
+  sel.innerHTML = `<optgroup label="Variantes 1">${exs.map(x => `<option value="${x.id}">V1 · ${esc(x.name)}</option>`).join("")}</optgroup>` +
+    (S.variants.length ? `<optgroup label="Variantes 2">${S.variants.map(v => `<option value="${v.id}">Variante ${String(v.n).padStart(2, "0")} · ${esc(v.srcName)}</option>`).join("")}</optgroup>` : "");
+  sel.value = S.selected || "";
+}
+$("#selItem").onchange = e => select(e.target.value);
+function select(id) {
+  const prev = curEl();
+  S.selected = id; S.selCap = null;
+  const now = curEl(); if (prev && prev !== now) { prev.pause(); playing = false; }
+  setStageSize(); renderItemSelect(); renderEditor(); renderVariants();
+}
+function swatches(name, val) { return `<input type="color" data-f="${name}" value="${val}" aria-label="${name}">`; }
+function renderEditor() {
+  const it = current(), ex = exOf(it), ed = $("#editor");
+  if (!it) { ed.innerHTML = `<div class="empty">Ajoute tes <b>variantes 1</b> (tes vidéos déjà montées avec texte) dans le Dépôt. Claude repère leur texte, puis les variantes 2 apparaissent en bas.</div>`; return; }
+  if (!ex.result) { ed.innerHTML = `<div class="empty">${ex.status === "reading" || ex.status === "queued" ? "Gemini lit le texte de cette vidéo…" : esc(exStatusText(ex))}</div>`; return; }
+  const caps = [...ex.result.captions].sort((a, b) => a.start - b.start);
+  if (!isVariant(it)) {
+    ed.innerHTML = `
+      <div class="note">Voici ta <b>variante 1</b>. Les cadres montrent le texte repéré par Claude. Vérifie qu’ils entourent bien chaque texte : déplace un cadre sur la vidéo, tire son coin jaune pour l’agrandir. La couleur du texte doit correspondre à celle de la vidéo (bouton pipette ◉ pour la prendre directement sur l’image).</div>
+      <div class="style-grid">
+        <label class="fld"><span>Sensibilité · ${Math.round((ex.tol || 0.22) * 100)}</span><input type="range" id="exTol" min="0.08" max="0.45" step="0.01" value="${ex.tol || 0.22}"></label>
+        <label class="chk"><input type="checkbox" id="exTest" ${ex.test ? "checked" : ""}> Tester le changement de couleur</label>
+      </div>
+      <div class="row" style="justify-content:space-between"><span class="hint">${caps.length} texte${caps.length > 1 ? "s" : ""} repéré${caps.length > 1 ? "s" : ""}</span><button class="btn sm" id="btnAddZone" type="button">+ Zone de texte au temps actuel</button></div>
+      <div class="caps">${caps.map((c, i) => `
+        <div class="cap ${S.selCap === c.id ? "sel" : ""}" data-id="${c.id}">
+          <input type="text" class="cap-text" id="t-${c.id}" data-f="text" value="${esc(c.text)}" aria-label="Texte ${i + 1}">
+          <div class="cap-line">
+            <span class="cap-n">#${i + 1}</span>
+            <span class="time"><span class="lbl">de</span><input id="s-${c.id}" data-f="start" type="number" step="0.05" min="0" value="${(+c.start).toFixed(2)}"><button class="icon-btn" data-act="setStart" type="button" title="Début = temps actuel" aria-label="Début au temps actuel">⏱</button></span>
+            <span class="time"><span class="lbl">à</span><input id="e-${c.id}" data-f="end" type="number" step="0.05" min="0" value="${(+c.end).toFixed(2)}"><button class="icon-btn" data-act="setEnd" type="button" title="Fin = temps actuel" aria-label="Fin au temps actuel">⏱</button></span>
+          </div>
+          <div class="cap-line">
+            <span class="mini">Texte ${swatches("color", c.color)}<button class="icon-btn sm" data-pick="color" type="button" title="Prendre la couleur sur la vidéo" aria-label="Pipette texte">◉</button></span>
+            <span class="mini">Contour ${swatches("stroke", strokeOf(c))}<button class="icon-btn sm" data-pick="stroke" type="button" title="Prendre la couleur sur la vidéo" aria-label="Pipette contour">◉</button></span>
+            <span class="mini">Mot surligné ${swatches("hl", c.hl)}<button class="icon-btn sm" data-pick="hl" type="button" title="Prendre la couleur sur la vidéo" aria-label="Pipette surlignage">◉</button></span>
+            <button class="icon-btn" data-act="seek" type="button" title="Aller à ce texte" aria-label="Aller à ce texte">↦</button>
+            <button class="icon-btn" data-act="del" type="button" title="Retirer cette zone" aria-label="Retirer" style="color:var(--danger)">✕</button>
+          </div>
+        </div>`).join("")}</div>`;
+  } else {
+    const v = it;
+    ed.innerHTML = `
+      <div class="note">Variante 2 de <b>${esc(v.srcName)}</b> : la vidéo est identique, seule la couleur du texte change. Coche « Comparer avec la variante 1 » pour voir l’original.</div>
+      <div class="style-grid">
+        <label class="mini">Couleur du texte <input type="color" id="vFill" value="${v.fill}"></label>
+        <label class="mini">Mot surligné <input type="color" id="vHl" value="${v.hl}"></label>
+        <button class="btn sm" id="vNext" type="button">↻ Autre couleur</button>
+      </div>
+      <span class="hint">Couleur par texte (laisse tel quel pour suivre la couleur de la variante) :</span>
+      <div class="caps">${caps.map((c, i) => { const col = colorsFor(v, c); return `
+        <div class="cap" data-id="${c.id}">
+          <div class="cap-line"><span class="cap-n">#${i + 1}</span><span class="cap-label">${esc(c.text)}</span></div>
+          <div class="cap-line">
+            <span class="mini">Texte <input type="color" data-vf="fill" value="${col.fill}"></span>
+            ${hasHl(c) ? `<span class="mini">Mot surligné <input type="color" data-vf="hl" value="${col.hl}"></span>` : ""}
+            <button class="icon-btn" data-act="seek" type="button" title="Aller à ce texte" aria-label="Aller à ce texte">↦</button>
+          </div>
+        </div>`; }).join("")}</div>`;
+  }
+}
+function markRows(t) {
+  const ex = curEx(); if (!ex || !ex.result) return;
+  document.querySelectorAll("#editor .cap").forEach(el => { const c = ex.result.captions.find(x => x.id === el.dataset.id); el.classList.toggle("on", !!c && t >= c.start && t <= c.end); });
+}
+function renderSelRows(scroll) {
+  document.querySelectorAll("#editor .cap").forEach(el => el.classList.toggle("sel", el.dataset.id === S.selCap));
+  if (scroll) { const el = document.querySelector(`#editor .cap[data-id="${S.selCap}"]`); el && el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+}
+$("#editor").addEventListener("input", e => {
+  const it = current(), ex = exOf(it); if (!ex || !ex.result) return;
+  const t = e.target;
+  if (t.id === "exTol") { ex.tol = +t.value; t.previousElementSibling.textContent = "Sensibilité · " + Math.round(ex.tol * 100); exChanged(ex); return; }
+  if (t.id === "exTest") { ex.test = t.checked; dirty = true; return; }
+  if (t.id === "vFill" || t.id === "vHl") { it[t.id === "vFill" ? "fill" : "hl"] = t.value.toUpperCase(); variantChanged(it); return; }
+  const row = t.closest(".cap"); if (!row) return;
+  const c = ex.result.captions.find(x => x.id === row.dataset.id); if (!c) return;
+  if (t.dataset.vf) { it.per = it.per || {}; it.per[c.id] = Object.assign({}, it.per[c.id], { [t.dataset.vf]: t.value.toUpperCase() }); variantChanged(it); return; }
+  const f = t.dataset.f; if (!f) return;
+  c[f] = ["start", "end"].includes(f) ? (+t.value || 0) : f === "text" ? t.value : t.value.toUpperCase();
+  exChanged(ex);
+});
+$("#editor").addEventListener("change", e => { if (e.target.id === "exTest") return; if (["start", "end"].includes(e.target.dataset.f)) renderEditor(); });
+$("#editor").addEventListener("focusin", e => { const row = e.target.closest(".cap"); if (row && S.selCap !== row.dataset.id) { S.selCap = row.dataset.id; renderSelRows(); dirty = true; } });
+$("#editor").addEventListener("click", e => {
+  const it = current(), ex = exOf(it); if (!ex || !ex.result) return;
+  if (e.target.id === "vNext") { nextColor(it); renderEditor(); return; }
+  if (e.target.id === "btnAddZone") {
+    const t = ex.el ? +ex.el.currentTime.toFixed(2) : 0;
+    const c = { id: uid(), text: "Nouveau texte", start: t, end: Math.min(ex.dur, t + 2), box: [0.2, 0.3, 0.8, 0.36], color: "#FFFFFF", hl: "#FFFFFF", stroke: "#000000", rot: 0 };
+    ex.result.captions.push(c); S.selCap = c.id; exChanged(ex); renderEditor(); return;
+  }
+  const pk = e.target.closest("[data-pick]");
+  if (pk) { pick = { cap: pk.closest(".cap").dataset.id, f: pk.dataset.pick }; overlay.classList.add("picking"); toast("Clique sur le texte dans la vidéo pour prendre sa couleur."); return; }
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const c = ex.result.captions.find(x => x.id === b.closest(".cap").dataset.id); if (!c) return;
+  const a = b.dataset.act;
+  if (a === "seek") { seek((c.start + c.end) / 2); S.selCap = c.id; renderSelRows(); return; }
+  if (a === "setStart") c.start = +ex.el.currentTime.toFixed(2);
+  if (a === "setEnd") c.end = +ex.el.currentTime.toFixed(2);
+  if (a === "del") ex.result.captions = ex.result.captions.filter(x => x !== c);
+  exChanged(ex); renderEditor();
+});
+let thumbT;
+function exChanged(ex) {
+  dirty = true;
+  S.variants.filter(v => v.exId === ex.id).forEach(v => { v.blob = null; setStatus(v, ""); setProg(v, 0); });
+  clearTimeout(thumbT); thumbT = setTimeout(() => S.variants.filter(v => v.exId === ex.id).forEach(drawThumb), 200);
+}
+function variantChanged(v) { v.auto = false; v.blob = null; setStatus(v, ""); setProg(v, 0); dirty = true; clearTimeout(thumbT); thumbT = setTimeout(() => { drawThumb(v); updateChips(v); }, 120); }
+
+/* ---------- drop folder ---------- */
+let sampleNS = null, sampleReady = false, downloadsNS = null;
+const clipMeta = d => d.url ? `${d.w}×${d.h} · ${fmt(d.dur)} · ${fmtSize(d.size)}` : "vidéo à redéposer";
+function exStatusText(ex) {
+  return ({
+    missing: "Redépose cette vidéo pour la retrouver (projet ouvert).",
+    queued: "En attente de lecture…",
+    reading: ex.msg || "Gemini repère le texte…",
+    done: ex.result ? `✓ ${ex.result.captions.length} texte${ex.result.captions.length > 1 ? "s" : ""} repéré${ex.result.captions.length > 1 ? "s" : ""} · ${S.variants.filter(v => v.exId === ex.id).length} variante(s) 2` : "",
+    error: ex.msg || "La lecture a échoué.",
+    manual: "Lecture automatique indisponible : ajoute ta clé API Google dans ⚙ Réglages."
+  })[ex.status] || "";
+}
+function setExMsg(ex, msg) { ex.msg = msg; const el = document.querySelector(`[data-exst="${ex.id}"]`); if (el) el.textContent = exStatusText(ex); }
+function renderDrops() {
+  const clipRows = S.clips.map((c, i) => `
+    <div class="src-row" data-cid="${c.id}">
+      <div class="src-th"><video src="${c.url}#t=0.5" muted playsinline preload="metadata"></video><span>${i + 1}</span></div>
+      <div style="min-width:0"><div class="src-name" title="${esc(c.name)}">${esc(c.name)}</div><div class="meta">${clipMeta(c)}</div></div>
+      <div class="src-acts"><button class="icon-btn" data-cl="rm" type="button" aria-label="Retirer" title="Retirer">✕</button></div>
+    </div>`).join("");
+  const exRows = S.examples.map(ex => `
+    <div class="src-row ${S.selected === ex.id ? "cur" : ""}" data-eid="${ex.id}">
+      <div class="src-th">${ex.url ? `<video src="${ex.url}#t=0.5" muted playsinline preload="metadata"></video>` : ""}</div>
+      <div style="min-width:0"><div class="src-name" title="${esc(ex.name)}">${esc(ex.name)}</div>
+        <div class="meta">${clipMeta(ex)}</div>
+        <div class="ex-st ${ex.status}" data-exst="${ex.id}">${exStatusText(ex)}</div>
+        <div class="acts">${ex.url ? `<button class="btn sm ghost" data-ex="open" type="button">Vérifier dans le Studio</button>` : ""}${ex.status === "error" ? `<button class="btn sm" data-ex="retry" type="button">Relire</button>` : ""}</div></div>
+      <div class="src-acts"><button class="icon-btn" data-ex="rm" type="button" aria-label="Retirer" title="Retirer">✕</button></div>
+    </div>`).join("");
+  $("#drops").innerHTML = `
+    <div class="dsec" data-slot="orig">
+      <div class="dsec-h"><h3>Vidéos originales <span class="tag">Référence</span></h3><span class="meta">${S.clips.length || ""}</span></div>
+      <p class="hint" style="margin:0">Le décor sans texte. Claude s’en sert pour bien distinguer ton texte de la scène. Elles ne sont pas réexportées.</p>
+      <div class="src-list">${clipRows}</div>
+      <button class="addzone" data-pick="orig" type="button"><b>＋ Ajouter des vidéos originales</b><span>Autant que tu veux.</span></button>
+    </div>
+    <div class="dsec" data-slot="ex">
+      <div class="dsec-h"><h3>Variantes 1 <span class="tag y">Tes montages</span></h3><span class="meta">${S.examples.length || ""}</span></div>
+      <p class="hint" style="margin:0">Les vidéos que tu as montées avec ton texte. Chaque variante 2 est une copie de l’une d’elles avec une autre couleur de texte.</p>
+      <div class="src-list">${exRows}</div>
+      <button class="addzone" data-pick="ex" type="button"><b>＋ Ajouter tes variantes 1</b><span>${sampleReady && !sampleNS ? "Lecture automatique indisponible : ajoute ta clé API Google dans ⚙ Réglages." : "Autant que tu veux. Gemini repère le texte de chacune."}</span></button>
+    </div>`;
+}
+let pickSlot = null;
+$("#drops").addEventListener("click", e => {
+  const p = e.target.closest("[data-pick]");
+  if (p) { pickSlot = p.dataset.pick; const f = $("#fileAny"); f.multiple = true; f.accept = "video/*"; f.value = ""; f.click(); return; }
+  const cl = e.target.closest("[data-cl]");
+  if (cl) { const i = S.clips.findIndex(c => c.id === cl.closest("[data-cid]").dataset.cid); if (i >= 0) { URL.revokeObjectURL(S.clips[i].url); S.clips.splice(i, 1); renderDrops(); } return; }
+  const ea = e.target.closest("[data-ex]");
+  if (ea) {
+    const ex = exById(ea.closest("[data-eid]").dataset.eid); if (!ex) return;
+    const a = ea.dataset.ex;
+    if (a === "open") { select(ex.id); $("#stageBox").scrollIntoView({ behavior: "smooth", block: "center" }); }
+    if (a === "retry") { ex.status = "queued"; renderDrops(); runQueue(); }
+    if (a === "rm") {
+      S.examples = S.examples.filter(x => x !== ex); S.variants = S.variants.filter(v => v.exId !== ex.id);
+      if (ex.el) { ex.el.pause(); ex.el.removeAttribute("src"); ex.el.load(); } if (ex.url) URL.revokeObjectURL(ex.url);
+      if (!current()) S.selected = (S.examples.find(x => x.url) || {}).id || null;
+      renumber(); setStageSize(); renderAll();
+    }
+  }
+});
+$("#fileAny").onchange = e => { const fs = [...e.target.files]; if (fs.length) takeFiles(pickSlot, fs); };
+$("#drops").addEventListener("dragover", e => { const d = e.target.closest("[data-slot]"); if (!d) return; e.preventDefault(); d.classList.add("over"); });
+$("#drops").addEventListener("dragleave", e => { const d = e.target.closest("[data-slot]"); if (d && !d.contains(e.relatedTarget)) d.classList.remove("over"); });
+$("#drops").addEventListener("drop", e => { const d = e.target.closest("[data-slot]"); if (!d) return; e.preventDefault(); d.classList.remove("over"); const fs = [...e.dataTransfer.files]; if (fs.length) takeFiles(d.dataset.slot, fs); });
+const isVideo = f => (f.type || "").startsWith("video/") || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
+async function loadMeta(file) {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement("video"); v.muted = true; v.preload = "metadata"; v.src = url;
+  await once(v, "loadedmetadata");
+  return { url, name: file.name, size: file.size, w: v.videoWidth, h: v.videoHeight, dur: v.duration };
+}
+function makeEl(ex) {
+  const v = document.createElement("video"); v.playsInline = true; v.preload = "auto"; v.loop = true; v.muted = $("#optMute").checked; v.src = ex.url;
+  ["seeked", "loadeddata"].forEach(k => v.addEventListener(k, () => dirty = true));
+  return v;
+}
+async function takeFiles(slot, files) {
+  const vids = files.filter(isVideo);
+  if (!vids.length) { toast("Ce fichier n’est pas une vidéo."); return; }
+  if (vids.length < files.length) toast("Les fichiers qui ne sont pas des vidéos ont été ignorés.");
+  for (const f of vids) {
+    try {
+      const d = await loadMeta(f);
+      if (slot === "orig") { S.clips.push({ id: uid(), ...d }); continue; }
+      const missing = S.examples.find(x => !x.url && x.name === d.name && x.size === d.size);
+      if (missing) { Object.assign(missing, d); missing.status = missing.result ? "done" : "queued"; missing.el = makeEl(missing); captureStill(missing); continue; }
+      const ex = { id: uid(), ...d, status: "queued", tol: 0.22 }; ex.el = makeEl(ex); S.examples.push(ex);
+      if (!current()) S.selected = ex.id;
+    } catch (err) { toast("Impossible de lire " + f.name + "."); }
+  }
+  setStageSize(); renderAll();
+  if (slot === "ex") runQueue();
+}
+
+/* ---------- Claude locates the text of each variante 1 ---------- */
+let anaBusy = false;
+async function runQueue() {
+  if (anaBusy || !sampleReady) return;
+  const ex = S.examples.find(x => x.status === "queued"); if (!ex) return;
+  if (!sampleNS) { S.examples.forEach(x => { if (x.status === "queued") x.status = "manual"; }); renderDrops(); renderEditor(); return; }
+  anaBusy = true; ex.status = "reading"; ex.msg = ""; renderDrops(); renderEditor();
+  try {
+    ex.result = await readCaptions(ex);
+    ex.status = "done";
+    await captureStill(ex);
+  } catch (err) {
+    const code = err && err.code;
+    ex.status = "error";
+    ex.msg = code === "not_granted" ? "Lecture refusée par Gemini. Vérifie ta clé API dans ⚙ Réglages, puis clique sur Relire."
+      : code === "rate_limited" ? "Trop de demandes d’un coup. Clique sur Relire dans une minute."
+      : code === "images_unavailable" ? "Lecture du texte indisponible : vérifie ta clé API dans ⚙ Réglages."
+      : (err && err.message) || "La lecture a échoué.";
+  } finally {
+    anaBusy = false; renderDrops(); renderEditor(); dirty = true;
+    if (!S.examples.some(x => x.status === "queued")) autoBatch();
+    runQueue();
+  }
+}
+async function grabFrames(url, times, width) {
+  const v = document.createElement("video"); v.muted = true; v.preload = "auto"; v.src = url; await once(v, "loadeddata");
+  const c = document.createElement("canvas"); c.width = width; c.height = Math.round(width * v.videoHeight / v.videoWidth); const cx = c.getContext("2d");
+  const out = [];
+  for (const t of times) { v.currentTime = clamp(t, 0, v.duration - 0.05); await once(v, "seeked"); cx.drawImage(v, 0, 0, c.width, c.height); out.push(await new Promise(r => c.toBlob(r, "image/jpeg", 0.88))); }
+  v.removeAttribute("src"); v.load();
+  return { frames: out, w: c.width, h: c.height };
+}
+async function readCaptions(ex) {
+  const lim = await sampleNS.limits().catch(() => null);
+  if (!lim || !lim.images) throw { code: "images_unavailable" };
+  const maxImg = Math.min(18, lim.images.maxCount || 8);
+  const nOrig = Math.min(S.clips.length ? 2 : 0, Math.max(0, maxImg - 4));
+  const D = ex.dur, n = clamp(Math.ceil(D / 1), 4, maxImg - nOrig);
+  setExMsg(ex, "Extraction des images…");
+  const times = Array.from({ length: n }, (_, k) => +((k + 0.5) * D / n).toFixed(2));
+  const g = await grabFrames(ex.url, times, 720);
+  const origFrames = [];
+  for (let i = 0; i < nOrig; i++) { const c = S.clips[i % S.clips.length]; const o = await grabFrames(c.url, [c.dur * (i ? 0.6 : 0.3)], 540); origFrames.push(...o.frames); }
+  setExMsg(ex, `Gemini repère le texte sur ${n} images…`);
+  const prompt = `You help a video editor recolor the burned-in caption text of an Instagram Reel without changing anything else. To do it, the software needs the exact location and colors of every caption.
+The first ${n} images are frames, in order, from the edited video (${g.w}x${g.h}, ${D.toFixed(2)} s). Frame times in seconds: ${times.join(", ")}.${nOrig ? `
+The last ${nOrig} image(s) are frames from the ORIGINAL footage before captions were added. Use them only to tell apart caption overlays from text or objects that are part of the scene (signs, clothes, screens): never return scene text.` : ""}
+The captions are usually in English: copy the text exactly, never translate.
+Return every caption overlay (ignore Instagram/TikTok interface, watermarks, usernames). One caption = one block of text that appears and disappears together; list items shown as separate blocks are separate captions.
+For each caption:
+- "text": exact text.
+- "start","end": seconds when it is visible (from the first and last frames showing it; start halfway between the previous frame time and the first frame showing it, end halfway to the next frame time; clamp to 0 and ${D.toFixed(2)}).
+- "box": [left, top, right, bottom] tight bounding box around the glyphs and their outline, as fractions of frame width and height (0..1). Be precise: only pixels inside this box get recolored.
+- "color": the main fill color of the letters, hex, sampled from the middle of thick strokes, not from anti-aliased edges.
+- "highlight": the fill color of words drawn in a different color in that caption (same as color if none).
+- "stroke": the outline or shadow color right around the letters, hex, or null if the letters sit directly on the video.
+- "rotation": degrees, positive clockwise.
+Reply with only JSON: {"captions":[{"text":"...","start":0,"end":2.5,"box":[0.1,0.2,0.9,0.3],"color":"#FFFFFF","highlight":"#FFFFFF","stroke":"#000000","rotation":0}]}`;
+  const res = await sampleNS.json(prompt, { images: [...g.frames, ...origFrames], modelTier: "complex" });
+  const caps = (res && Array.isArray(res.captions) ? res.captions : []).filter(k => k && typeof k.text === "string" && k.text.trim() && Array.isArray(k.box) && k.box.length === 4);
+  if (!caps.length) throw new Error("Aucun texte trouvé sur cette vidéo. Vérifie qu’elle contient bien du texte incrusté.");
+  return {
+    captions: caps.map(k => {
+      const b = k.box.map(x => clamp(+x || 0, 0, 1));
+      const box = [Math.min(b[0], b[2]), Math.min(b[1], b[3]), Math.max(b[0], b[2]), Math.max(b[1], b[3])];
+      const col = hex(k.color, "#FFFFFF");
+      const c = { id: uid(), text: k.text, start: clamp(+k.start || 0, 0, D), end: clamp(+k.end || D, 0, D), box, color: col, hl: hex(k.highlight, col), stroke: k.stroke ? hex(k.stroke, null) : null, rot: clamp(+k.rotation || 0, -20, 20) };
+      if (c.end <= c.start) c.end = Math.min(D, c.start + 1.5);
+      if (c.end >= D - 0.6) c.end = D;
+      return c;
+    })
+  };
+}
+/* a still frame of each variante 1, used for the variant thumbnails */
+async function captureStill(ex) {
+  if (!ex.url) return;
+  const caps = ex.result ? ex.result.captions : [];
+  let t = Math.min(1, ex.dur / 2), best = -1;
+  caps.forEach(c => { const tt = clamp((c.start + c.end) / 2, 0, ex.dur - 0.05); const n = caps.filter(x => tt >= x.start && tt <= x.end).length; if (n > best) { best = n; t = tt; } });
+  try {
+    const v = document.createElement("video"); v.muted = true; v.preload = "auto"; v.src = ex.url; await once(v, "loadeddata");
+    v.currentTime = t; await once(v, "seeked");
+    const c = document.createElement("canvas"); c.width = 360; c.height = Math.round(360 * v.videoHeight / v.videoWidth); c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+    ex.still = c; ex.stillT = t; v.removeAttribute("src"); v.load();
+  } catch (e) { }
+  S.variants.filter(v => v.exId === ex.id).forEach(drawThumb);
+}
+
+/* ---------- generator ---------- */
+function renderPalette() {
+  $("#palette").innerHTML = PAL.map((p, i) => `<button class="pchip ${S.settings.off.includes(p.n) ? "off" : ""}" data-pal="${i}" type="button" aria-pressed="${!S.settings.off.includes(p.n)}" title="${p.n}"><i style="background:${p.fill}"></i>${p.n}</button>`).join("");
+}
+$("#palette").addEventListener("click", e => {
+  const b = e.target.closest("[data-pal]"); if (!b) return; const n = PAL[+b.dataset.pal].n;
+  const off = S.settings.off; const i = off.indexOf(n); if (i >= 0) off.splice(i, 1); else if (off.length < PAL.length - 1) off.push(n);
+  saveSettings(); renderPalette();
+});
+function colorForIndex(ex, k) {
+  const base = ex.result.captions[0] ? ex.result.captions[0].color : "#FFFFFF";
+  const pool = PAL.filter(p => !S.settings.off.includes(p.n) && cdist(p.fill, base) > 70);
+  if (k < pool.length) { const p = pool[k]; const hl = HL_ALT.find(h => cdist(h, p.fill) > 120) || "#FFFFFF"; return { n: p.n, fill: p.fill, hl }; }
+  const h = (k * 137.508 + 20) % 360, fill = hsl(h, 90, 62);
+  return { n: "Teinte " + Math.round(h) + "°", fill, hl: lum(fill) > 0.6 ? "#111111" : "#FFFFFF" };
+}
+function makeVariant(ex) {
+  ex.k = ex.k || 0;
+  const used = new Set(S.variants.filter(v => v.exId === ex.id).map(v => v.fill));
+  let col; do { col = colorForIndex(ex, ex.k++); } while (used.has(col.fill) && ex.k < 400);
+  return { id: uid(), auto: true, n: ++S.counter, exId: ex.id, srcName: ex.name, fill: col.fill, hl: col.hl, colName: col.n, per: {} };
+}
+function nextColor(v) {
+  const ex = exById(v.exId); if (!ex) return;
+  const used = new Set(S.variants.map(x => x.fill)); let col;
+  do { col = colorForIndex(ex, ex.k++); } while (used.has(col.fill) && ex.k < 400);
+  Object.assign(v, { fill: col.fill, hl: col.hl, colName: col.n, per: {} }); variantChanged(v); updateChips(v);
+}
+function renumber() { S.variants.forEach((v, i) => v.n = i + 2); S.counter = S.variants.length + 1; }
+function autoBatch() {
+  if (!S.settings.auto) return;
+  const fresh = S.examples.filter(x => x.status === "done" && !x.gen); if (!fresh.length) return;
+  fresh.forEach(x => x.gen = true);
+  fillTo(S.settings.count);
+}
+/* the requested number is the TOTAL, spread evenly over every variante 1 */
+function fillTo(total) {
+  total = clamp(total || 1, 1, 60);
+  const exs = S.examples.filter(x => x.status === "done" && x.result);
+  if (!exs.length) { toast("Ajoute d’abord tes variantes 1 dans le Dépôt et attends que Claude ait repéré leur texte."); return; }
+  const keep = S.variants.filter(v => v.auto === false || v.blob);
+  S.variants = keep;
+  exs.forEach(ex => { ex.k = 0; });
+  let i = 0;
+  while (S.variants.length < total) {
+    const counts = exs.map(ex => S.variants.filter(v => v.exId === ex.id).length);
+    const min = Math.min(...counts), ex = exs[counts.findIndex((c, j) => c === min && j >= 0)];
+    S.variants.push(makeVariant(ex)); if (++i > 500) break;
+  }
+  S.variants.sort((a, b) => exs.indexOf(exById(a.exId)) - exs.indexOf(exById(b.exId)));
+  renumber();
+  if (S.selected && !current()) S.selected = exs[0].id;
+  renderAll();
+  toast(`${S.variants.length} variante${S.variants.length > 1 ? "s" : ""} 2 au total${exs.length > 1 ? ", réparties sur " + exs.length + " variantes 1" : ""}.`);
+}
+function updateGenBtn() { const n = clamp(+$("#genCount").value || 1, 1, 60); $("#btnGen").textContent = `Générer ${n} variante${n > 1 ? "s" : ""} au total`; }
+$("#genCount").value = S.settings.count; updateGenBtn();
+$("#genCount").addEventListener("input", () => { S.settings.count = clamp(+$("#genCount").value || 1, 1, 60); updateGenBtn(); saveSettings(); });
+$("#optAuto").checked = S.settings.auto; $("#optAuto").onchange = e => { S.settings.auto = e.target.checked; saveSettings(); };
+$("#btnGen").onclick = () => { fillTo(clamp(+$("#genCount").value || 1, 1, 60)); $("#reelTitle").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+/* ---------- variants grid ---------- */
+const thumbCanvas = $("#thumbGL"); let RT = null; try { RT = makeRenderer(thumbCanvas); } catch (e) { RT = null; }
+function drawThumb(v) {
+  const cv = document.querySelector(`.vcard[data-id="${v.id}"] canvas`); const ex = exById(v.exId); if (!cv || !ex || !ex.still || !RT) return;
+  thumbCanvas.width = ex.still.width; thumbCanvas.height = ex.still.height;
+  RT.draw(ex.still, recolorItems(ex, v, ex.stillT));
+  cv.width = ex.still.width; cv.height = ex.still.height; cv.getContext("2d").drawImage(thumbCanvas, 0, 0);
+}
+function chipsHtml(v) { return `<span class="chip"><i style="background:${v.fill}"></i>${esc(v.colName || "Personnalisée")}</span>${v.auto === false ? `<span class="chip">Retouchée</span>` : ""}`; }
+function updateChips(v) { const el = document.querySelector(`.vcard[data-id="${v.id}"] .chips`); if (el) el.innerHTML = chipsHtml(v); }
+function renderVariants() {
+  $("#reelTitle").textContent = S.variants.length ? `Variantes 2 · ${S.variants.length}` : "Variantes 2";
+  const g = $("#vgrid");
+  if (!S.variants.length) { g.innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Aucune variante 2 pour l’instant.</b><br>Ajoute tes variantes 1 dans le Dépôt. Dès que Claude a repéré leur texte, les variantes 2 apparaissent ici.</div>`; return; }
+  g.innerHTML = S.variants.map(v => `
+    <article class="vcard ${S.selected === v.id ? "sel" : ""}" data-id="${v.id}">
+      <div class="prog"><i></i></div>
+      <div class="vtop">
+        <canvas class="vthumb" title="Voir dans le Studio" aria-label="Aperçu variante ${v.n}"></canvas>
+        <div style="min-width:0">
+          <div class="vname"><h3>Variante <b>${String(v.n).padStart(2, "0")}</b><small class="vsrc" title="${esc(v.srcName)}">d’après ${esc(v.srcName)}</small></h3><button class="icon-btn" data-va="del" type="button" aria-label="Supprimer la variante" title="Supprimer">✕</button></div>
+          <div class="chips">${chipsHtml(v)}</div>
+          <div class="status" data-st></div>
+        </div>
+      </div>
+      <div class="vfoot">
+        <button class="btn sm" data-va="open" type="button">Voir</button>
+        <button class="btn sm ghost" data-va="next" type="button" title="Autre couleur">↻ Autre couleur</button>
+        <span class="sp"></span>
+      </div>
+    </article>`).join("");
+  S.variants.forEach(v => { drawThumb(v); setStatus(v, v.status || "", v.blob); });
+}
+$("#vgrid").addEventListener("click", e => {
+  const card = e.target.closest(".vcard"); if (!card) return;
+  const v = S.variants.find(x => x.id === card.dataset.id); if (!v) return;
+  const b = e.target.closest("[data-va]");
+  if (e.target.matches("canvas.vthumb") || (b && b.dataset.va === "open")) { select(v.id); const ex = exById(v.exId); if (ex && ex.stillT != null) seek(ex.stillT); $("#stageBox").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+  if (!b) return;
+  if (b.dataset.va === "del") { S.variants = S.variants.filter(x => x !== v); renumber(); if (S.selected === v.id) S.selected = v.exId; renderAll(); }
+  if (b.dataset.va === "next") { nextColor(v); if (S.selected === v.id) renderEditor(); }
+});
+$("#btnClear").onclick = () => {
+  const b = $("#btnClear"); if (!S.variants.length) return;
+  if (b.dataset.armed) { S.variants = []; S.counter = 1; if (isVariant(current()) || !current()) S.selected = (S.examples.find(x => x.url) || {}).id || null; renderAll(); b.textContent = "Tout effacer"; delete b.dataset.armed; return; }
+  b.dataset.armed = "1"; b.textContent = "Confirmer l’effacement"; setTimeout(() => { if (b.dataset.armed) { delete b.dataset.armed; b.textContent = "Tout effacer"; } }, 3500);
+};
+function setStatus(v, txt, ok) { v.status = txt; const card = document.querySelector(`.vcard[data-id="${v.id}"]`); if (!card) return; const st = card.querySelector("[data-st]"); st.textContent = txt; st.classList.toggle("ok", !!ok); }
+function setProg(v, p) { const card = document.querySelector(`.vcard[data-id="${v.id}"]`); if (card) card.querySelector(".prog>i").style.width = (p * 100).toFixed(1) + "%"; }
+
+/* ---------- export ---------- */
+const MIMES = ["video/mp4;codecs=avc1.640033,mp4a.40.2", "video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4;codecs=avc1,mp4a", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+const MIME = typeof MediaRecorder !== "undefined" ? MIMES.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) : null;
+const EXT = MIME ? (MIME.startsWith("video/mp4") ? "mp4" : "webm") : null;
+$("#fmtInfo").textContent = MIME ? "Format : " + EXT.toUpperCase() : "Export vidéo non pris en charge par ce navigateur";
+function bitrate(ex) {
+  const q = $("#selQuality").value;
+  if (q === "high") return 20e6; if (q === "light") return 8e6;
+  // Qualité maximale : au moins 1,5 fois le débit de ta vidéo d'origine (jamais moins de 16 Mbit/s).
+  const b = clamp(ex.size * 8 / Math.max(1, ex.dur) * 1.5, 16e6, 80e6);
+  return b;
+}
+function bitrateFor(ex) {
+  let b = bitrate(ex);
+  if (driveCap) b = Math.min(b, Math.max(0.8e6, driveTarget * 8 * 0.85 / Math.max(1, ex.dur) - 160000));
+  return b;
+}
+let ac = null, cancelFlag = false, busy = false;
+function getAC() { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); return ac; }
+const fileName = v => `${(v.srcName || "video").replace(/\.[^.]+$/, "").replace(/[^\w\-]+/g, "_").slice(0, 60)}_v${String(v.n).padStart(2, "0")}.${EXT}`;
+async function renderVideo(v, onProg, slot = 0) {
+  const ex = exById(v.exId); const A = getAC(); try { await A.resume(); } catch (e) { }
+  const vid = document.createElement("video"); vid.playsInline = true; vid.preload = "auto"; vid.src = ex.url; await once(vid, "loadeddata");
+  const W = vid.videoWidth, H = vid.videoHeight, srcDur = vid.duration;
+  const { cv, r, release } = exportRenderer(W, H);
+  const draw = t => r.draw(vid, recolorItems(ex, v, t));
+  draw(0);
+  // « Comme la source » : une image enregistrée pour chaque image de la vidéo d'origine (même cadence).
+  const fpsSel = $("#selFps").value;
+  // 60 = plafond : une image est capturée à chaque nouvelle image dessinée, donc la cadence de la source (jusqu’à 60 i/s).
+  const stream = cv.captureStream(fpsSel === "auto" ? 60 : (+fpsSel || 30));
+  let node = null, noAudio = false;
+  try { node = A.createMediaElementSource(vid); const dest = A.createMediaStreamDestination(); node.connect(dest); dest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr)); } catch (e) { noAudio = true; }
+  const rec = new MediaRecorder(stream, { mimeType: MIME, videoBitsPerSecond: Math.round(bitrateFor(ex)), audioBitsPerSecond: 320000 });
+  const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise(res => rec.onstop = res);
+  let done = false, frames = 0, missed = 0, lastPF = null;
+  const loop = (ts, meta) => {
+    if (done) return;
+    if (meta && meta.presentedFrames != null) { if (lastPF != null && meta.presentedFrames - lastPF > 1) missed += meta.presentedFrames - lastPF - 1; lastPF = meta.presentedFrames; }
+    frames++;
+    const t = meta && meta.mediaTime != null ? meta.mediaTime : vid.currentTime; draw(t); onProg(clamp(t / vid.duration, 0, 1)); sched();
+  };
+  const sched = () => vid.requestVideoFrameCallback ? vid.requestVideoFrameCallback(loop) : requestAnimationFrame(t => loop(t, null));
+  rec.start(500);
+  try { await vid.play(); } catch (e) { vid.muted = true; noAudio = true; await vid.play(); }
+  sched();
+  await new Promise(res => { const iv = setInterval(() => { if (vid.ended || cancelFlag) { clearInterval(iv); res(); } }, 100); vid.addEventListener("ended", () => { clearInterval(iv); res(); }, { once: true }); });
+  done = true; draw(vid.duration); await sleep(150);
+  vid.pause(); rec.stop(); await stopped;
+  stream.getTracks().forEach(tr => { try { tr.stop(); } catch (e) { } });
+  release();
+  try { node && node.disconnect(); } catch (e) { }
+  vid.removeAttribute("src"); vid.load();
+  if (cancelFlag) throw new Error("cancel");
+  return { blob: new Blob(chunks, { type: MIME.split(";")[0] }), noAudio, frames, missed, W, H, dur: srcDur };
+}
+function canExport(v) {
+  if (!MIME) { toast("Ce navigateur ne sait pas encoder de vidéo. Ouvre la page dans Chrome ou Edge sur ordinateur."); return false; }
+  if (busy) { toast("Un export est déjà en cours."); return false; }
+  const bad = (v ? [v] : S.variants).find(x => { const ex = exById(x.exId); return !ex || !ex.url; });
+  if (bad) { toast("Redépose d’abord la variante 1 « " + bad.srcName + " » dans le Dépôt."); return false; }
+  return true;
+}
+// Relit la vidéo produite : elle doit avoir une image, la bonne taille et la bonne durée.
+async function checkVideo(blob, W, H, dur) {
+  const u = URL.createObjectURL(blob); const el = document.createElement("video"); el.muted = true; el.preload = "metadata"; el.src = u;
+  try {
+    await once(el, "loadedmetadata", 15000);
+    if (!isFinite(el.duration)) { el.currentTime = 1e9; await once(el, "seeked", 8000).catch(() => { }); }
+    return { hasVideo: el.videoWidth > 0 && el.videoHeight > 0, sameSize: el.videoWidth === W && el.videoHeight === H, durOk: !isFinite(el.duration) || Math.abs(el.duration - dur) < Math.max(0.6, dur * 0.05) };
+  } catch (e) { return { hasVideo: false, sameSize: false, durOk: false }; }
+  finally { el.removeAttribute("src"); el.load(); URL.revokeObjectURL(u); }
+}
+async function ensureBlob(v, slot = 0) {
+  if (v.blob) return v.blob;
+  setStatus(v, "Rendu en cours… garde cet onglet visible");
+  const t0 = performance.now();
+  const r = await renderVideo(v, p => { setProg(v, p); const el = performance.now() - t0; if (p > 0.05) setStatus(v, `Rendu ${Math.round(p * 100)}% · reste ~${Math.max(0, Math.round(el / p * (1 - p) / 1000))} s`); }, slot);
+  const chk = await checkVideo(r.blob, r.W, r.H, r.dur);
+  if (!chk.hasVideo) throw new Error("la vidéo produite n’a pas d’image (elle va être refaite)");
+  v.blob = r.blob; setProg(v, 1);
+  const ex = exById(v.exId);
+  v.report = { W: r.W, H: r.H, frames: r.frames, missed: r.missed, fps: r.frames / Math.max(0.1, r.dur), mbps: r.blob.size * 8 / Math.max(0.1, r.dur) / 1e6, srcMbps: ex ? ex.size * 8 / Math.max(0.1, ex.dur) / 1e6 : 0, srcW: ex && ex.w, srcH: ex && ex.h, noAudio: r.noAudio, durOk: chk.durOk };
+  setStatus(v, `Prête · ${fmtSize(r.blob.size)}${r.noAudio ? " · sans son" : ""}`, true);
+  return v.blob;
+}
+async function saveFile(name, data) {
+  if (!downloadsNS) { toast("L’enregistrement de fichiers n’est pas disponible dans cette vue. Ouvre la page sur claude.ai."); return false; }
+  try { await downloadsNS.save({ filename: name, data }); toast("Enregistré : " + name); return true; }
+  catch (e) {
+    const m = { declined: "Enregistrement annulé.", rate_limited: "Une fenêtre d’enregistrement est déjà ouverte. Réessaie dans un instant.", too_large: "Fichier trop gros pour cette destination. Choisis la qualité Légère.", rejected_extension: "Ce format n’est pas accepté ici." }[e && e.code];
+    toast(m || "Enregistrement impossible (" + ((e && (e.message || e.code)) || e) + ")."); return false;
+  }
+}
+function setBusy(b) { busy = b; $("#btnCancel").hidden = !b; $("#bigprog").hidden = !b; $("#btnExportAll").disabled = b; document.querySelectorAll('[data-va="export"]').forEach(x => x.disabled = b); }
+async function exportOne(v) {
+  if (!canExport(v)) return;
+  cancelFlag = false; setBusy(true);
+  try { const blob = await ensureBlob(v); setBusy(false); await saveFile(fileName(v), blob); }
+  catch (e) { setStatus(v, e.message === "cancel" ? "Annulé" : "Échec du rendu"); setProg(v, 0); if (e.message !== "cancel") toast("Le rendu a échoué : " + (e.message || e)); }
+  finally { setBusy(false); }
+}
+$("#btnCancel").onclick = () => { cancelFlag = true; };
+/* ---------- Google Drive (connecteur Google Drive de claude.ai) ---------- */
+// Journal des envois (lisible par Claude) : en cas d'échec, la réponse exacte de Google est gardée pour corriger.
+let dbNS = null;
+async function logDrive(entry) {
+  try {
+    if (!dbNS) dbNS = await window.claude.use("db");
+    if (dbNS) await dbNS.collection("diag").add({ at: new Date().toISOString(), ua: navigator.userAgent.slice(0, 160), ...entry });
+  } catch (e) { }
+}
+let mcpNS = null, fileArgsOk = null;
+const GD = "Google Drive";
+const DRIVE_TARGETS = [9, 5, 2.8].map(m => m * 1024 * 1024); // tailles visées, de la meilleure qualité à la plus légère
+const DRIVE_MAX = DRIVE_TARGETS[0];
+let driveCap = false, driveTarget = DRIVE_MAX;
+function loadFolder() { try { return JSON.parse(localStorage.getItem("sv-drive-folder") || "null"); } catch (e) { return null; } }
+const drv = { trail: [{ id: "root", name: "Mon Drive" }], folder: loadFolder() };
+function saveFolder(f) { drv.folder = f; try { localStorage.setItem("sv-drive-folder", JSON.stringify(f)); } catch (e) { } }
+const gdKind = e => {
+  const c = e && e.code;
+  if (c === "server_not_connected" || c === "needs_reauth" || c === "server_not_found") return "conn";
+  if (c === "selection_required") return "choose";
+  if (c === "not_in_manifest" || c === "approval_required" || c === "blocked_by_policy") return "denied";
+  if (c === "not_granted" || c === "capability_disabled" || c === "capability_removed") return "noapp";
+  return "other";
+};
+const GD_MSG = {
+  conn: "Le connecteur Google Drive n’est pas connecté (ou doit être reconnecté) : claude.ai → Paramètres → Connecteurs → Google Drive.",
+  choose: "Plusieurs connecteurs Google Drive : choisis lequel utiliser dans la fenêtre de claude.ai, puis réessaie.",
+  denied: "Tu n’as pas autorisé le Studio à utiliser Google Drive. Autorise-le dans le menu Autorisations de la page, puis réessaie.",
+  noapp: "Le Drive n’est pas disponible dans cette vue. Ouvre le Studio sur claude.ai (connecté à ton compte).",
+};
+const errDetail = e => { if (!e) return "erreur inconnue"; let t = [e.code, e.message].filter(Boolean).join(" · "); try { const r = e.result && (e.result.content || []).map(c => c.text).filter(Boolean).join(" "); if (r && !t.includes(r)) t += " · " + r; } catch (x) { } return (t || String(e)).slice(0, 300); };
+const gdMsg = e => GD_MSG[gdKind(e)] || ("Google Drive : " + errDetail(e));
+async function gd(tool, input) {
+  if (!mcpNS) throw { code: "not_granted" };
+  const r = await mcpNS.callTool(GD, tool, input, { cache: false });
+  return r.payload;
+}
+function renderDriveBar() { return;
+  $("#driveBar").classList.remove("warn");
+  $("#driveFolderLbl").textContent = drv.folder ? drv.folder.path : "Non choisi";
+  $("#driveStateLbl").textContent = drv.folder ? "Un clic sur « Exporter dans mon Drive » envoie toutes les variantes 2 affichées dans ce dossier. Supprime d’abord celles que tu ne veux pas (✕)." : "Choisis le dossier de ton Google Drive où déposer les variantes 2.";
+}
+function showDriveProblem(msg) { $("#driveStateLbl").textContent = msg; $("#driveBar").classList.add("warn"); toast("Rien n’a été enregistré sur ton ordinateur. " + msg); }
+// Dossiers de ton Drive, lus par Vexa (connecté à ton compte Google).
+async function listFolders(id) {
+  const r = await vexa("vexa_drive_folders", { parent_id: id });
+  return (r && r.dossiers || []).map(d => ({ id: d.id, name: d.name || "Sans nom" })).sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+}
+const inClaudeApp = () => /Electron|Claude\//i.test(navigator.userAgent);
+const NOT_APP = "Tu as ouvert le Studio dans un navigateur (Chrome). L’envoi direct dans ton Drive ne marche que dans l’app Claude pour Mac : ouvre l’app Claude, va dans cette conversation et clique sur le Studio.";
+const vexaMsg = e => vexaUnreachable(e) ? (inClaudeApp() ? "Le Studio ne joint pas Vexa : vérifie que le serveur « vexa » est dans la configuration de Claude Desktop et que l’app a été relancée (⌘Q puis rouvrir) après la mise à jour de Vexa." : NOT_APP)
+  : (e && (e.code === "not_in_manifest" || e.code === "approval_required" || e.code === "cancelled")) ? "Autorise le Studio à utiliser Vexa dans la fenêtre de l’app Claude, puis réessaie."
+  : /non connecté|Client ID|jeton/i.test(String(e && e.message || "")) ? "Vexa n’est pas relié à ton Google Drive : dans Vexa, Paramètres → Google Drive → Se connecter avec Google."
+  : "Vexa : " + errDetail(e);
+function dlgMsg(t) { $("#driveDlgMsg").textContent = t || ""; }
+async function loadDriveDir(trail) {
+  $("#driveList").innerHTML = `<div class="hint" style="padding:8px">Lecture de ton Drive…</div>`; $("#driveChooseBtn").disabled = true;
+  try {
+    const dirs = await listFolders(trail[trail.length - 1].id);
+    drv.trail = trail; dlgMsg("Parcours ton Drive, puis clique « Déposer ici ».");
+    $("#driveCrumb").innerHTML = trail.map((c, i) => i < trail.length - 1 ? `<a href="#" data-crumb="${i}">${esc(c.name)}</a>` : `<b>${esc(c.name)}</b>`).join(" › ");
+    $("#driveList").innerHTML = (trail.length > 1 ? `<button class="dlg-dir" data-up="1" type="button">⬆ Dossier parent</button>` : "") +
+      (dirs.length ? dirs.map((d, k) => `<button class="dlg-dir" data-dir="${k}" type="button">📁 ${esc(d.name)}</button>`).join("") : `<div class="hint" style="padding:8px">Aucun sous-dossier ici.</div>`);
+    $("#driveList").dataset.dirs = JSON.stringify(dirs);
+    $("#driveChooseBtn").textContent = `Déposer ici : « ${trail[trail.length - 1].name} »`; $("#driveChooseBtn").disabled = false;
+  } catch (e) { $("#driveList").innerHTML = ""; dlgMsg(vexaMsg(e)); }
+}
+async function openDriveDialog() {
+  $("#driveDlg").hidden = false; $("#driveCrumb").textContent = ""; $("#driveList").innerHTML = ""; $("#driveChooseBtn").disabled = true;
+  if (!mcpNS) { dlgMsg(vexaMsg({ code: "not_granted" })); return; }
+  dlgMsg("Connexion à ton Google Drive via Vexa…");
+  try { const st = await vexa("vexa_drive_status"); if (!st.relie) { dlgMsg(vexaMsg({ message: "non connecté" })); return; } }
+  catch (e) { dlgMsg(vexaMsg(e)); return; }
+  loadDriveDir([{ id: "root", name: "Mon Drive" }]);
+}
+// Le dossier se choisit dans Vexa (Bibliothèque → Choisir le dossier Drive…) ; ici on affiche celui qui est enregistré.
+if ($("#btnPickDrive")) $("#btnPickDrive").onclick = async () => {
+  try {
+    const st = await vexa("vexa_drive_status");
+    if (!st.relie) return vexaHelp("Vexa n’est pas encore relié à ton Google Drive : dans Vexa, Paramètres → Google Drive → Se connecter avec Google.");
+    if (!st.dossier) return vexaHelp("Aucun dossier choisi : dans Vexa, Bibliothèque → Choisir le dossier Drive… (ex. VEXA AUTO MARKET › Dossier variante !!).");
+    $("#driveFolderLbl").textContent = st.dossier; $("#driveBar").classList.remove("warn"); $("#btnZip").hidden = true;
+    $("#driveStateLbl").textContent = "C’est ce dossier qui recevra les vidéos. Pour en changer : dans Vexa, Bibliothèque → Choisir le dossier Drive…";
+  } catch (e) { vexaHelp(vexaMsg(e), e); }
+};
+$("#driveDlgClose").onclick = () => { $("#driveDlg").hidden = true; };
+$("#driveDlg").addEventListener("click", e => { if (e.target.id === "driveDlg") $("#driveDlg").hidden = true; });
+$("#driveDlg").addEventListener("keydown", e => { if (e.key === "Escape") $("#driveDlg").hidden = true; });
+$("#driveCrumb").addEventListener("click", e => { const a = e.target.closest("[data-crumb]"); if (!a) return; e.preventDefault(); loadDriveDir(drv.trail.slice(0, +a.dataset.crumb + 1)); });
+$("#driveList").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.up) { loadDriveDir(drv.trail.slice(0, -1)); return; }
+  const d = JSON.parse($("#driveList").dataset.dirs || "[]")[+b.dataset.dir]; if (d) loadDriveDir([...drv.trail, { id: d.id, name: d.name }]);
+});
+$("#driveNewBtn").onclick = async () => {
+  const name = $("#driveNewName").value.trim(); if (!name) return;
+  if (/[\\/]/.test(name)) { toast("Le nom du dossier ne peut pas contenir / ou \\."); return; }
+  const parent = drv.trail[drv.trail.length - 1];
+  try {
+    const r = await vexa("vexa_drive_create_folder", { parent_id: parent.id, name });
+    $("#driveNewName").value = "";
+    if (r && r.id) await loadDriveDir([...drv.trail, { id: r.id, name: r.name || name }]); else await loadDriveDir(drv.trail);
+  } catch (e) { toast("Création impossible. " + vexaMsg(e)); }
+};
+$("#driveChooseBtn").onclick = async () => {
+  const here = drv.trail[drv.trail.length - 1], path = drv.trail.map(c => c.name).join(" › ");
+  try {
+    await vexa("vexa_drive_set_folder", { id: here.id, path });
+    $("#driveFolderLbl").textContent = path; $("#driveBar").classList.remove("warn"); $("#btnZip").hidden = true;
+    $("#driveStateLbl").textContent = "Dossier enregistré. Clique sur « Exporter dans mon Drive » : Vexa prépare les vidéos en qualité maximale et les envoie ici. Rien ne reste sur ton Mac.";
+    $("#driveDlg").hidden = true; toast("Les variantes 2 iront dans « " + here.name + " » sur ton Google Drive.");
+  } catch (e) { toast("Choix impossible. " + vexaMsg(e)); }
+};
+async function canSendFiles() {
+  if (fileArgsOk !== null) return fileArgsOk;
+  try { const l = await mcpNS.listTools(); fileArgsOk = !!(l && l.fileArgs); } catch (e) { fileArgsOk = false; }
+  return fileArgsOk;
+}
+// Relais par Claude : si l'envoi direct échoue, la vidéo finie est gardée dans le stockage de la page
+// et Claude (dans la conversation) la dépose dans le même dossier Drive. Ça marche à coup sûr.
+let assetsNS = null, relayWatch = false;
+async function relayToClaude(v, blob, name) {
+  if (!assetsNS) assetsNS = await window.claude.use("assets");
+  if (!dbNS) dbNS = await window.claude.use("db");
+  if (!assetsNS || !dbNS) throw new Error("stockage de la page indisponible");
+  setStatus(v, "Mise de côté pour Claude…");
+  const a = await assetsNS.upload(new File([blob], name, { type: blob.type || "video/mp4" }));
+  await dbNS.collection("exports").doc(v.id).set({ name, assetId: a.id, size: blob.size, type: blob.type || "video/mp4", folderId: drv.folder.id, folderPath: drv.folder.path, status: "waiting", at: new Date().toISOString() });
+  v.relay = true; setStatus(v, "⏳ Prête : écris « envoie » à Claude dans la conversation");
+  watchRelay();
+}
+function watchRelay() {
+  if (relayWatch || !dbNS) return; relayWatch = true;
+  try {
+    dbNS.collection("exports").onSnapshot(snap => {
+      snap.docs.forEach(d => { const x = d.data() || {}; const v = S.variants.find(z => z.id === d.id); if (!v) return;
+        if (x.status === "sent") { v.driveUrl = x.link || null; setStatus(v, "✓ Dans ton Drive", true); setProg(v, 1); }
+        else if (x.status === "error") setStatus(v, "Échec côté Claude : " + (x.error || "?")); });
+    }, () => { relayWatch = false; });
+  } catch (e) { relayWatch = false; }
+}
+// Rend la vidéo à une taille visée puis l'envoie ; si Google refuse, recompresse plus fort et réessaie.
+async function sendToDrive(v) {
+  let lastErr = null;
+  for (let a = 0; a < DRIVE_TARGETS.length; a++) {
+    driveTarget = DRIVE_TARGETS[a];
+    if (!v.blob || v.blob.size > driveTarget * 1.05 || a > 0) {
+      v.blob = null; driveCap = true;
+      try { setStatus(v, a ? `Nouvel essai plus léger (${a + 1}/${DRIVE_TARGETS.length})…` : "Préparation de la vidéo…"); await ensureBlob(v); }
+      finally { driveCap = false; }
+    }
+    const blob = v.blob, name = fileName(v), type = blob.type || "video/mp4";
+    for (let r = 0; r < 2; r++) {
+      setStatus(v, `Envoi dans ton Drive (${fmtSize(blob.size)})…`);
+      try {
+        const res = await gd("create_file", { title: name, ...(drv.folder.id !== "root" ? { parentId: drv.folder.id } : {}), contentMimeType: type, disableConversionToGoogleType: true, base64Content: { $file: { data: blob, name, type } } });
+        v.driveUrl = res && (res.viewUrl || res.webViewLink) || null; setStatus(v, "✓ Dans ton Drive", true); setProg(v, 1);
+        logDrive({ step: "create_file", ok: true, attempt: a + 1, size: blob.size, type });
+        return res;
+      } catch (e) {
+        lastErr = e;
+        let res = ""; try { res = JSON.stringify(e && e.result).slice(0, 1500); } catch (x) { }
+        logDrive({ step: "create_file", attempt: a + 1, retry: r, size: blob.size, type, name, folder: drv.folder.id === "root" ? "root" : "set", code: String(e && e.code || ""), message: String(e && e.message || e).slice(0, 600), retryable: !!(e && e.retryable), result: res || "", fileArgs: !!fileArgsOk });
+        if (gdKind(e) !== "other") throw e;
+        if (e && e.retryable && r === 0) { await sleep(Math.min(8000, e.retryAfterMs || 2500)); continue; }
+        break;
+      }
+    }
+  }
+  throw lastErr || new Error("envoi impossible");
+}
+async function exportToDrive(list) {
+  if (!list.length) { toast("Génère d’abord des variantes 2."); return; }
+  if (busy) { toast("Un export est déjà en cours."); return; }
+  if (!mcpNS) { showDriveProblem(GD_MSG.noapp); return; }
+  if (!drv.folder) { openDriveDialog(); toast("Choisis d’abord ton dossier Google Drive."); return; }
+  if (!MIME) { showDriveProblem("Ce navigateur ne sait pas encoder de vidéo. Utilise Chrome ou Edge sur ordinateur."); return; }
+  const bad = list.find(x => { const ex = exById(x.exId); return !ex || !ex.url; });
+  if (bad) { toast("Redépose d’abord la variante 1 « " + bad.srcName + " » dans le Dépôt."); return; }
+  const directOk = await canSendFiles();
+  if (!directOk) logDrive({ step: "fileArgs", fileArgs: false });
+  // (si l'envoi direct de fichiers n'existe pas dans cette vue, on passe directement par le relais)
+  // Une seule autorisation Google Drive pour tout le lot (au lieu d'une demande au premier envoi).
+  try { const perm = await window.claude.use("permissions"); if (perm) { const stt = await perm.state("mcp:" + GD).catch(() => "unavailable"); if (stt === "prompt") await perm.request(["mcp:" + GD]); } } catch (e) { }
+  cancelFlag = false; setBusy(true); const bar = $("#bigprog>i"); let ok = 0, fail = 0, relayed = 0, relayMode = !directOk;
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const v = list[i]; bar.style.width = (i / list.length * 100) + "%";
+      try {
+        if (relayMode) throw { code: "relay" };
+        await sendToDrive(v); ok++;
+      } catch (e) {
+        if (e && e.message === "cancel") throw e;
+        if (e && e.code !== "relay") { v.blob = null; if (!(e && e.code)) logDrive({ step: "render_or_other", message: String(e && e.message || e).slice(0, 600) }); relayMode = true; }
+        // Envoi direct impossible : on passe en relais par Claude pour cette vidéo et les suivantes.
+        try {
+          if (!v.blob) { driveTarget = DRIVE_TARGETS[0]; driveCap = true; try { await ensureBlob(v); } finally { driveCap = false; } }
+          if (v.blob.size > DRIVE_TARGETS[0] * 1.05) { v.blob = null; driveTarget = DRIVE_TARGETS[0]; driveCap = true; try { await ensureBlob(v); } finally { driveCap = false; } }
+          await relayToClaude(v, v.blob, fileName(v)); relayed++;
+        } catch (e2) {
+          if (e2 && e2.message === "cancel") throw e2;
+          fail++; setStatus(v, "Pas envoyée : " + gdMsg(e) + " · relais impossible : " + errDetail(e2));
+          logDrive({ step: "relay", message: errDetail(e2) });
+        }
+      }
+    }
+    bar.style.width = "100%";
+    if (relayed) { $("#driveStateLbl").textContent = `${relayed} vidéo${relayed > 1 ? "s" : ""} prête${relayed > 1 ? "s" : ""} : écris « envoie » à Claude dans la conversation, il les dépose dans « ${drv.folder.path} ».`; $("#driveBar").classList.add("warn"); }
+    toast(relayed ? `${ok ? ok + " envoyée(s) directement · " : ""}${relayed} prête(s) : écris « envoie » à Claude pour les déposer dans ton Drive.${fail ? ` ${fail} en échec.` : ""}` : `${ok} variante${ok > 1 ? "s" : ""} 2 envoyée${ok > 1 ? "s" : ""} dans « ${drv.folder.path} »${fail ? ` · ${fail} en échec (voir les cartes)` : ""}.`);
+  } catch (e) { toast(e.message === "cancel" ? "Export annulé." : "L’export a échoué : " + (e.message || e)); }
+  finally { setBusy(false); }
+}
+const n1 = x => x.toFixed(1).replace(".", ",");
+function qualityWarn(v) { const q = v.report; if (!q) return false; return q.missed > Math.max(2, q.frames * 0.02) || q.fps < 20 || q.mbps < q.srcMbps * 0.8 || q.W !== q.srcW || q.H !== q.srcH || q.noAudio || q.durOk === false; }
+function qualityLine(v) {
+  const q = v.report; if (!q) return "✓ Enregistrée";
+  const base = `${q.W}×${q.H} · ${Math.round(q.fps)} i/s · ${n1(q.mbps)} Mbit/s (origine ${n1(q.srcMbps)})`;
+  if (q.missed > Math.max(2, q.frames * 0.02)) return `⚠ ${q.missed} images sautées (${base}) : garde l’onglet visible, ferme les autres apps, puis réexporte.`;
+  if (q.fps < 20) return `⚠ Cadence trop basse (${base}) : garde l’onglet visible, ferme les autres apps, puis réexporte.`;
+  if (q.mbps < q.srcMbps * 0.8) return `⚠ Débit plus bas que l’origine (${base}) : réexporte avec la qualité « Maximale ».`;
+  if (q.noAudio) return `⚠ Enregistrée sans le son (${base}).`;
+  return `✓ Qualité maximale · ${base}`;
+}
+// Export pleine qualité : chaque vidéo est rendue au débit maximal puis enregistrée (dossier Google Drive pour ordinateur).
+async function exportFull(list) {
+  if (!list.length) { toast("Génère d’abord des variantes 2."); return; }
+  if (busy) { toast("Un export est déjà en cours."); return; }
+  if (!canExport()) return;
+  if (!downloadsNS) { showDriveProblem("L’enregistrement n’est pas disponible dans cette vue. Ouvre le Studio sur claude.ai dans Chrome."); return; }
+  cancelFlag = false; setBusy(true); driveCap = false;
+  const bar = $("#bigprog>i"); bar.style.width = "2%";
+  const par = Math.max(1, Math.min(list.length, +$("#selPar").value || list.length));
+  let done = 0;
+  const progress = () => { bar.style.width = Math.max(2, done / list.length * 90) + "%"; };
+  try {
+    // 1) Toutes les vidéos en même temps (jusqu'au nombre choisi)
+    list.forEach(v => { if (!v.fullq) v.blob = null; setStatus(v, "En attente…"); });
+    const queue = list.slice();
+    const worker = async slot => { while (queue.length && !cancelFlag) { const v = queue.shift(); try { await ensureBlob(v, slot); v.fullq = true; setStatus(v, qualityLine(v), !qualityWarn(v)); } catch (e) { if (e && e.message === "cancel") throw e; v.blob = null; setStatus(v, "Échec du rendu : " + (e.message || e)); } done++; progress(); } };
+    await Promise.all(Array.from({ length: par }, (_, k) => worker(k)));
+    if (cancelFlag) throw new Error("cancel");
+    // 2) Celles qui ont perdu des images ou du débit : refaites une par une (meilleure qualité)
+    const redo = list.filter(v => !v.blob || qualityWarn(v));
+    for (const v of redo) {
+      if (cancelFlag) throw new Error("cancel");
+      const prev = v.blob ? { blob: v.blob, report: v.report } : null; // on garde la version précédente si le nouvel essai n'est pas meilleur
+      v.blob = null; setStatus(v, "Contrôle qualité : nouveau rendu seule…");
+      try { await ensureBlob(v, 0); v.fullq = true; } catch (e) { if (e && e.message === "cancel") throw e; }
+      const score = q => q ? (q.missed || 0) + (q.fps < 20 ? 1000 : 0) : 1e9;
+      if (prev && (!v.blob || score(v.report) > score(prev.report))) { v.blob = prev.blob; v.report = prev.report; }
+      setStatus(v, v.blob ? qualityLine(v) : "Échec du rendu", v.blob && !qualityWarn(v));
+    }
+    // 3) Un seul fichier pour tout le lot
+    const ready = list.filter(v => v.blob);
+    if (!ready.length) throw new Error("aucune vidéo n’a pu être rendue");
+    bar.style.width = "94%";
+    const files = [];
+    for (const v of ready) files.push({ name: fileName(v), data: new Uint8Array(await v.blob.arrayBuffer()) });
+    const zip = makeZip(files);
+    const zipName = `variantes_2_${new Date().toISOString().slice(0, 10)}.zip`;
+    for (let tries = 0; tries < 20; tries++) {
+      try { await downloadsNS.save({ filename: zipName, data: zip }); break; }
+      catch (e) {
+        if (e && e.code === "rate_limited") { await sleep(1500); continue; }
+        if (e && e.code === "declined") { toast("Enregistrement annulé. Les vidéos restent prêtes : reclique sur Exporter pour les enregistrer sans les refaire."); return; }
+        throw new Error((e && (e.message || e.code)) || "enregistrement impossible");
+      }
+    }
+    bar.style.width = "100%";
+    const warn = ready.filter(qualityWarn).length;
+    toast(`${ready.length} vidéo${ready.length > 1 ? "s" : ""} en qualité maximale dans « ${zipName} » (${fmtSize(zip.size)}).${warn ? ` ⚠ ${warn} à vérifier (voir les cartes).` : ""} Double-clique le zip dans ton dossier Drive pour obtenir les vidéos.`);
+  } catch (e) { toast(e.message === "cancel" ? "Export annulé. Les vidéos déjà prêtes sont gardées." : "L’export a échoué : " + (e.message || e)); }
+  finally { setBusy(false); }
+}
+/* ---------- Export direct dans Google Drive via Vexa (app Mac, serveur MCP local « vexa ») ---------- */
+const VEXA = "host:vexa";
+async function vexa(tool, input) { if (!mcpNS) throw { code: "not_granted" }; const r = await mcpNS.callTool(VEXA, tool, input || {}, { cache: false }); return r.payload; }
+const vexaUnreachable = e => ["server_not_connected", "not_granted", "capability_disabled", "capability_removed", "server_not_found"].includes(e && e.code) || (e && e.code === "tool_error" && /Outil inconnu|Méthode non prise/i.test(String(e.message || "")));
+function vexaHelp(msg, e) { logDrive({ step: "vexa_help", message: String(msg).slice(0, 300), hasMcp: !!mcpNS, inApp: inClaudeApp(), code: String(e && e.code || ""), detail: e ? errDetail(e) : "" }); $("#driveStateLbl").textContent = msg; $("#driveBar").classList.add("warn"); $("#btnZip").hidden = false; }
+async function exportViaVexa(list) {
+  if (!list.length) { toast("Génère d’abord des variantes 2."); return; }
+  if (busy) { toast("Un export est déjà en cours."); return; }
+  let st;
+  try { st = await vexa("vexa_drive_status"); logDrive({ step: "vexa_status", relie: !!(st && st.relie), dossier: String(st && st.dossier || "") }); }
+  catch (e) {
+    logDrive({ step: "vexa_status_error", code: String(e && e.code || ""), message: errDetail(e) });
+    if (vexaUnreachable(e)) return vexaHelp(vexaMsg(e));
+    if (e && (e.code === "not_in_manifest" || e.code === "approval_required" || e.code === "cancelled")) return vexaHelp("Autorise le Studio à utiliser Vexa (fenêtre de l’app Claude), puis reclique sur Exporter.");
+    return vexaHelp("Vexa ne répond pas : " + errDetail(e));
+  }
+  if (!st.relie) return vexaHelp("Vexa n’est pas encore relié à ton Google Drive : dans Vexa, Paramètres → Google Drive → Se connecter avec Google.");
+  if (!st.dossier) return vexaHelp("Choisis d’abord ton dossier de dépôt dans Vexa : Bibliothèque → Choisir le dossier Drive… (ex. VEXA AUTO MARKET › Dossier variante !!), puis reclique sur Exporter.");
+  $("#driveFolderLbl").textContent = st.dossier; $("#driveBar").classList.remove("warn"); $("#btnZip").hidden = true;
+  $("#driveStateLbl").textContent = "Vexa prépare les vidéos en qualité maximale et les envoie dans ce dossier. Rien ne reste sur ton Mac.";
+  setBusy(true); const bar = $("#bigprog>i"); bar.style.width = "3%";
+  list.forEach(v => { setStatus(v, "En attente de Vexa…"); setProg(v, 0); });
+  try {
+    const start = await vexa("vexa_studio_export", { project: serial(), variants: list.map(v => v.n) });
+    let res = null;
+    for (let k = 0; k < 3600; k++) {
+      await sleep(2000);
+      const j = await vexa("vexa_studio_export_status", { job_id: start.job_id });
+      const m = String(j.etape || "").match(/variante (\d+)/);
+      if (m) { const v = list.find(x => x.n === +m[1]); if (v) setStatus(v, j.etape); const li = list.findIndex(x => x.n === +m[1]); bar.style.width = Math.max(5, (Math.max(li, 0) + 0.5) / list.length * 100) + "%"; }
+      if (j.etat === "erreur") throw new Error(j.erreur || "échec");
+      if (j.etat === "termine") { res = j.resultat; break; }
+    }
+    if (!res) throw new Error("Vexa n’a pas fini à temps.");
+    logDrive({ step: "vexa_done", total: (res.variantes || []).length, ok: (res.variantes || []).filter(r => r.ok && r.drive).length, drive: JSON.stringify(res.drive || {}).slice(0, 400), errors: (res.variantes || []).filter(r => !(r.ok && r.drive)).map(r => (r.erreur || r.erreurDrive || "")).join(" | ").slice(0, 600) });
+    bar.style.width = "100%"; let ok = 0;
+    for (const r of res.variantes || []) {
+      const v = list.find(x => x.n === r.variante); if (!v) continue;
+      if (r.ok && r.drive) { ok++; setStatus(v, "✓ Dans ton Drive · qualité maximale", true); setProg(v, 1); }
+      else setStatus(v, r.ok ? "Créée mais pas envoyée : " + (r.erreurDrive || (res.drive && res.drive.erreur) || "Drive indisponible") : "Échec : " + (r.erreur || "?"));
+    }
+    toast(`${ok}/${(res.variantes || []).length} variantes 2 envoyées dans « ${st.dossier} ».`);
+  } catch (e) { logDrive({ step: "vexa_export_error", code: String(e && e.code || ""), message: errDetail(e) }); vexaUnreachable(e) ? vexaHelp("La connexion à Vexa a été coupée pendant l’export : relance Vexa et Claude Desktop, puis reclique sur Exporter.") : toast("L’export a échoué : " + errDetail(e)); }
+  finally { setBusy(false); }
+}
+/* ---------- Google Drive : connexion, dossier, envoi direct ---------- */
+const GSCOPE = "https://www.googleapis.com/auth/drive.file";
+let gToken = null, gExp = 0, gClient = null;
+let gFolder = (() => { try { return JSON.parse(localStorage.getItem("vx-folder") || "null"); } catch (e) { return null; } })();
+const waitFor = async (test, ms = 15000) => { const t0 = Date.now(); while (!test()) { if (Date.now() - t0 > ms) throw new Error("Google ne répond pas (vérifie ta connexion internet)."); await sleep(100); } };
+function needCfg() { if (!window.VX_CFG.clientId || !window.VX_CFG.apiKey) { openSettings(); toast("Renseigne d’abord tes clés Google (une seule fois)."); return true; } return false; }
+async function googleSignIn(silent) {
+  await waitFor(() => window.google && google.accounts && google.accounts.oauth2);
+  return new Promise((res, rej) => {
+    gClient = google.accounts.oauth2.initTokenClient({ client_id: window.VX_CFG.clientId, scope: GSCOPE,
+      callback: r => { if (r.error) return rej(new Error(r.error_description || r.error)); gToken = r.access_token; gExp = Date.now() + (r.expires_in || 3600) * 1000; try { localStorage.setItem("vx-google-ok", "1"); } catch (e) { } renderGoogle(); res(); },
+      error_callback: e => rej(new Error((e && e.message) || "connexion annulée")) });
+    gClient.requestAccessToken({ prompt: silent ? "" : (localStorage.getItem("vx-google-ok") ? "" : "consent") });
+  });
+}
+async function ensureToken() { if (!gToken || Date.now() > gExp - 60000) await googleSignIn(true); }
+function renderGoogle() {
+  const b = $("#btnGoogle"); b.classList.toggle("on", !!gToken); $("#gLbl").textContent = gToken ? "Google Drive connecté ✓" : "Se connecter avec Google";
+  $("#driveFolderLbl").textContent = gFolder ? "Dossier : " + gFolder.name : "Dossier : non choisi";
+}
+async function pickFolder() {
+  await ensureToken();
+  await waitFor(() => window.gapi);
+  if (!(window.google && google.picker)) await new Promise(r => gapi.load("picker", r));
+  return new Promise((res, rej) => {
+    const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS).setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes("application/vnd.google-apps.folder").setParent("root");
+    const appId = (window.VX_CFG.clientId.match(/^(\d+)-/) || [])[1];
+    const pb = new google.picker.PickerBuilder().addView(view).setOAuthToken(gToken).setDeveloperKey(window.VX_CFG.apiKey).setTitle("Choisis le dossier de dépôt")
+      .setCallback(d => { if (d.action === google.picker.Action.PICKED) res({ id: d.docs[0].id, name: d.docs[0].name }); else if (d.action === google.picker.Action.CANCEL) rej(new Error("annulé")); });
+    if (appId) pb.setAppId(appId);
+    pb.build().setVisible(true);
+  });
+}
+function driveUpload(blob, name, onProg) {
+  return new Promise(async (res, rej) => {
+    try {
+      const init = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink", { method: "POST",
+        headers: { Authorization: "Bearer " + gToken, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": blob.type || "video/mp4", "X-Upload-Content-Length": String(blob.size) },
+        body: JSON.stringify({ name, parents: [gFolder.id] }) });
+      if (!init.ok) return rej(new Error(`Google a refusé l’envoi (${init.status}) ${(await init.text()).slice(0, 160)}`));
+      const loc = init.headers.get("Location"); if (!loc) return rej(new Error("adresse d’envoi manquante"));
+      const x = new XMLHttpRequest(); x.open("PUT", loc); x.setRequestHeader("Content-Type", blob.type || "video/mp4");
+      x.upload.onprogress = e => e.lengthComputable && onProg && onProg(e.loaded / e.total);
+      x.onload = () => x.status >= 200 && x.status < 300 ? res(JSON.parse(x.responseText || "{}")) : rej(new Error(`envoi refusé (${x.status})`));
+      x.onerror = () => rej(new Error("connexion coupée pendant l’envoi")); x.send(blob);
+    } catch (e) { rej(e); }
+  });
+}
+$("#btnGoogle").onclick = async () => { if (needCfg()) return; try { await googleSignIn(false); toast("Google Drive connecté."); } catch (e) { toast("Connexion Google impossible : " + e.message); } };
+$("#btnPickFolder").onclick = async () => { if (needCfg()) return; try { gFolder = await pickFolder(); localStorage.setItem("vx-folder", JSON.stringify(gFolder)); renderGoogle(); toast("Les vidéos iront dans « " + gFolder.name + " »."); } catch (e) { if (e.message !== "annulé") toast("Choix impossible : " + e.message); } };
+$("#btnExportAll").onclick = async () => {
+  const list = S.variants.filter(v => { const ex = exById(v.exId); return ex && ex.result && ex.url; });
+  if (!list.length) { toast("Génère d’abord des variantes 2."); return; }
+  if (busy) { toast("Un export est déjà en cours."); return; }
+  if (needCfg()) return;
+  if (!MIME) { toast("Ce navigateur ne sait pas encoder de vidéo : utilise Chrome ou Edge sur ordinateur."); return; }
+  try { await ensureToken(); } catch (e) { toast("Connexion Google impossible : " + e.message); return; }
+  if (!gFolder) { try { gFolder = await pickFolder(); localStorage.setItem("vx-folder", JSON.stringify(gFolder)); renderGoogle(); } catch (e) { toast("Choisis d’abord le dossier de dépôt."); return; } }
+  cancelFlag = false; setBusy(true); driveCap = false; const bar = $("#bigprog>i"); bar.style.width = "2%";
+  let sent = 0, failed = 0, rendered = 0; const upQ = []; let upRun = false;
+  const step = () => { bar.style.width = Math.max(2, (rendered + sent + failed) / (list.length * 2) * 100) + "%"; };
+  const runUp = async () => {
+    if (upRun) return; upRun = true;
+    while (upQ.length) {
+      const v = upQ.shift();
+      try { await ensureToken(); await driveUpload(v.blob, fileName(v), p => setStatus(v, `Envoi dans ton Drive ${Math.round(p * 100)} %`)); sent++; setStatus(v, "✓ Dans ton Drive · " + qualityLine(v).replace(/^✓ Qualité maximale · /, ""), !qualityWarn(v)); v.blob = null; }
+      catch (e) { failed++; setStatus(v, "Envoi impossible : " + e.message); }
+      step();
+    }
+    upRun = false;
+  };
+  list.forEach(v => { setStatus(v, "En attente…"); setProg(v, 0); });
+  const queue = list.slice();
+  const worker = async slot => {
+    while (queue.length && !cancelFlag) {
+      const v = queue.shift(); let best = null;
+      for (let a = 0; a < 2 && !cancelFlag; a++) {
+        v.blob = null;
+        try { await ensureBlob(v, slot); if (!best || (v.report.missed || 0) < (best.report.missed || 0)) best = { blob: v.blob, report: v.report }; if (!qualityWarn(v)) break; setStatus(v, "Contrôle qualité : nouvel essai…"); }
+        catch (e) { if (e && e.message === "cancel") return; setStatus(v, "Nouvel essai…"); }
+      }
+      rendered++; step();
+      if (!best) { failed++; setStatus(v, "Préparation impossible"); continue; }
+      v.blob = best.blob; v.report = best.report; setStatus(v, "En file d’envoi…"); upQ.push(v); runUp();
+    }
+  };
+  try {
+    await Promise.all([worker(0), worker(1), worker(2)]);
+    while (upRun || upQ.length) await sleep(300);
+    bar.style.width = "100%";
+    toast(cancelFlag ? "Export annulé." : `${sent} vidéo${sent > 1 ? "s" : ""} envoyée${sent > 1 ? "s" : ""} dans « ${gFolder.name} »${failed ? ` · ${failed} en échec` : ""}. Rien n’a été enregistré sur ton ordinateur.`);
+  } finally { setBusy(false); }
+};
+/* ---------- réglages ---------- */
+function openSettings() { $("#setClient").value = window.VX_CFG.clientId; $("#setKey").value = window.VX_CFG.apiKey; $("#setModel").value = window.VX_CFG.model; $("#setDlg").hidden = false; }
+$("#btnSettings").onclick = openSettings;
+$("#setClose").onclick = () => { $("#setDlg").hidden = true; };
+$("#setSave").onclick = () => {
+  const c = $("#setClient").value.trim(), k = $("#setKey").value.trim(), m = $("#setModel").value.trim() || "gemini-2.5-flash";
+  if (c && !/\.apps\.googleusercontent\.com$/.test(c)) { toast("L’ID client doit se terminer par .apps.googleusercontent.com"); return; }
+  const hadKey = !!window.VX_CFG.apiKey;
+  window.VX_CFG = { clientId: c, apiKey: k, model: m }; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { }
+  $("#setDlg").hidden = true;
+  if (!hadKey && k) { toast("Réglages enregistrés. La page se recharge pour activer la lecture du texte."); setTimeout(() => location.reload(), 1200); } else toast("Réglages enregistrés.");
+};
+
+
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const d = new Date(), dt = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)), dd = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate());
+  for (const f of files) {
+    const nm = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(10, dt, true); h.setUint16(12, dd, true);
+    h.setUint32(14, crc, true); h.setUint32(18, sz, true); h.setUint32(22, sz, true); h.setUint16(26, nm.length, true);
+    parts.push(h.buffer, nm, f.data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(12, dt, true); c.setUint16(14, dd, true);
+    c.setUint32(16, crc, true); c.setUint32(20, sz, true); c.setUint32(24, sz, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    central.push(c.buffer, nm);
+    off += 30 + nm.length + sz;
+  }
+  const csz = central.reduce((a, b) => a + b.byteLength, 0);
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, csz, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, e.buffer], { type: "application/zip" });
+}
+
+/* ---------- project file ---------- */
+function serial() {
+  return { v: 3, settings: S.settings,
+    examples: S.examples.map(x => ({ id: x.id, name: x.name, size: x.size, w: x.w, h: x.h, dur: x.dur, tol: x.tol, result: x.result || null })),
+    variants: S.variants.map(v => ({ id: v.id, n: v.n, exId: v.exId, srcName: v.srcName, fill: v.fill, hl: v.hl, colName: v.colName, per: v.per, auto: v.auto })) };
+}
+$("#btnSave").onclick = () => saveFile("projet_variantes.json", JSON.stringify(serial(), null, 2));
+$("#btnOpen").onclick = () => { $("#fileProject").value = ""; $("#fileProject").click(); };
+$("#fileProject").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const o = JSON.parse(await f.text()); if (!o || o.v !== 3 || !Array.isArray(o.examples)) throw new Error("ce fichier ne vient pas de cette version de l’outil");
+    stopAll();
+    S.examples = o.examples.map(x => ({ ...x, url: null, el: null, status: "missing", gen: true }));
+    S.variants = (o.variants || []).filter(v => S.examples.some(x => x.id === v.exId)).map(v => ({ ...v, per: v.per || {} }));
+    Object.assign(S.settings, o.settings || {}); renumber(); S.selected = null; setStageSize(); renderAll();
+    toast("Projet ouvert. Redépose tes variantes 1 (mêmes fichiers) pour les retrouver et exporter.");
+  } catch (err) { toast("Impossible d’ouvrir ce projet : " + (err.message || err)); }
+};
+
+/* ---------- misc ---------- */
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4500); }
+function renderAll() { renderItemSelect(); renderEditor(); renderDrops(); renderVariants(); renderPalette(); dirty = true; }
+if (!R) toast("WebGL est désactivé dans ce navigateur : l’aperçu et l’export ne peuvent pas fonctionner.");
+setStageSize(); renderAll(); renderDriveBar(); renderGoogle();
+if (!window.VX_CFG.clientId || !window.VX_CFG.apiKey) setTimeout(openSettings, 400);
+
+(async () => {
+  for (let i = 0; i < 50 && !(window.claude && window.claude.use); i++) await sleep(200);
+  if (window.claude && window.claude.use) {
+    try { downloadsNS = await window.claude.use("downloads"); } catch (e) { }
+    try { sampleNS = await window.claude.use("sample"); } catch (e) { }
+    try { mcpNS = await window.claude.use("mcp"); } catch (e) { }
+    // Dossier Drive déjà choisi : on l'affiche (seulement si le Studio est déjà autorisé à utiliser Vexa, sans rien demander).
+    if (mcpNS) { try { const perm = await window.claude.use("permissions"); const stt = perm ? await perm.state("mcp:" + VEXA).catch(() => "unavailable") : "unavailable";
+      if (stt === "granted") { const st = await vexa("vexa_drive_status").catch(() => null); if (st && st.dossier) $("#driveFolderLbl").textContent = st.dossier; } } catch (e) { } }
+  }
+  sampleReady = true; renderDrops(); runQueue();
+})();
+})();
+</script>
+</body>
+</html>
