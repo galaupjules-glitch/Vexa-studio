@@ -342,7 +342,8 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
     <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois)</h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
-    <label class="fld"><span>Clé API Google (sélecteur de dossier + Gemini)</span><input type="text" id="setKey" autocomplete="off"></label>
+    <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
+    <label class="fld"><span>Clé Gemini (lecture du texte, depuis Google AI Studio)</span><input type="text" id="setGem" autocomplete="off"></label>
     <label class="fld"><span>Modèle Gemini pour lire le texte</span><input type="text" id="setModel" autocomplete="off"></label>
     <button class="btn primary" id="setSave" type="button">Enregistrer</button>
   </div>
@@ -356,7 +357,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 (() => {
   const get = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
   // Valeurs du projet Google Cloud de Vexa (publiques par nature ; la clé API est limitée à ce site).
-  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "", model: "gemini-2.5-flash" };
+  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "", geminiKey: "", model: "gemini-2.5-flash" };
   const saved = get("vx-web-cfg", {});
   window.VX_CFG = Object.assign({}, DEFAULTS, Object.fromEntries(Object.entries(saved).filter(([k, v]) => v)));
   const b64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
@@ -364,10 +365,11 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
     limits: async () => ({ images: { maxCount: 16 } }),
     json: async (prompt, opts = {}) => {
       const cfg = window.VX_CFG;
-      if (!cfg.apiKey) throw { code: "not_granted", message: "Clé API Google manquante (⚙ Réglages)." };
+      const gkey = cfg.geminiKey || cfg.apiKey;
+      if (!gkey) throw { code: "not_granted", message: "Clé Gemini manquante (⚙ Réglages)." };
       const parts = [{ text: prompt }];
       for (const im of opts.images || []) parts.push({ inline_data: { mime_type: im.type || "image/jpeg", data: await b64(im) } });
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || "gemini-2.5-flash")}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`, {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || "gemini-2.5-flash")}:generateContent?key=${encodeURIComponent(gkey)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseMimeType: "application/json", temperature: 0.1 } })
       });
@@ -379,7 +381,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
     }
   };
   const downloads = { save: async ({ filename, data }) => { const blob = data instanceof Blob ? data : new Blob([data]); const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000); return { status: "saved" }; } };
-  window.claude = { use: async n => n === "sample" ? (window.VX_CFG.apiKey ? gemini : null) : n === "downloads" ? downloads : null };
+  window.claude = { use: async n => n === "sample" ? ((window.VX_CFG.geminiKey || window.VX_CFG.apiKey) ? gemini : null) : n === "downloads" ? downloads : null };
 })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async></script>
@@ -1535,16 +1537,16 @@ $("#btnExportAll").onclick = async () => {
   } finally { setBusy(false); }
 };
 /* ---------- réglages ---------- */
-function openSettings() { $("#setClient").value = window.VX_CFG.clientId; $("#setKey").value = window.VX_CFG.apiKey; $("#setModel").value = window.VX_CFG.model; $("#setDlg").hidden = false; }
+function openSettings() { $("#setClient").value = window.VX_CFG.clientId; $("#setKey").value = window.VX_CFG.apiKey; $("#setGem").value = window.VX_CFG.geminiKey || ""; $("#setModel").value = window.VX_CFG.model; $("#setDlg").hidden = false; }
 $("#btnSettings").onclick = openSettings;
 $("#setClose").onclick = () => { $("#setDlg").hidden = true; };
 $("#setSave").onclick = () => {
-  const c = $("#setClient").value.trim(), k = $("#setKey").value.trim(), m = $("#setModel").value.trim() || "gemini-2.5-flash";
+  const c = $("#setClient").value.trim(), k = $("#setKey").value.trim(), gk = $("#setGem").value.trim(), m = $("#setModel").value.trim() || "gemini-2.5-flash";
   if (c && !/\.apps\.googleusercontent\.com$/.test(c)) { toast("L’ID client doit se terminer par .apps.googleusercontent.com"); return; }
-  const hadKey = !!window.VX_CFG.apiKey;
-  window.VX_CFG = { clientId: c, apiKey: k, model: m }; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { }
+  const hadKey = !!(window.VX_CFG.geminiKey || window.VX_CFG.apiKey);
+  window.VX_CFG = { clientId: c, apiKey: k, geminiKey: gk, model: m }; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { }
   $("#setDlg").hidden = true;
-  if (!hadKey && k) { toast("Réglages enregistrés. La page se recharge pour activer la lecture du texte."); setTimeout(() => location.reload(), 1200); } else toast("Réglages enregistrés.");
+  if (!hadKey && (gk || k)) { toast("Réglages enregistrés. La page se recharge pour activer la lecture du texte."); setTimeout(() => location.reload(), 1200); } else toast("Réglages enregistrés.");
 };
 
 
