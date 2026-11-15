@@ -340,7 +340,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-15 c</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-15 d (détection locale)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -796,7 +796,7 @@ function exStatusText(ex) {
   return ({
     missing: "Redépose cette vidéo pour la retrouver (projet ouvert).",
     queued: "En attente de lecture…",
-    reading: ex.msg || "Gemini repère le texte…",
+    reading: ex.msg || "Repérage du texte…",
     done: ex.result ? `✓ ${ex.result.captions.length} texte${ex.result.captions.length > 1 ? "s" : ""} repéré${ex.result.captions.length > 1 ? "s" : ""} · ${S.variants.filter(v => v.exId === ex.id).length} variante(s) 2` : "",
     error: ex.msg || "La lecture a échoué.",
     manual: "Lecture automatique indisponible : colle ta clé Gemini (AI Studio) dans ⚙ Réglages → « Clé Gemini »."
@@ -830,7 +830,7 @@ function renderDrops() {
       <div class="dsec-h"><h3>Variantes 1 <span class="tag y">Tes montages</span></h3><span class="meta">${S.examples.length || ""}</span></div>
       <p class="hint" style="margin:0">Les vidéos que tu as montées avec ton texte. Chaque variante 2 est une copie de l’une d’elles avec une autre couleur de texte.</p>
       <div class="src-list">${exRows}</div>
-      <button class="addzone" data-pick="ex" type="button"><b>＋ Ajouter tes variantes 1</b><span>${sampleReady && !sampleNS ? "Lecture automatique indisponible : colle ta clé Gemini (AI Studio) dans ⚙ Réglages → « Clé Gemini »." : "Autant que tu veux. Gemini repère le texte de chacune."}</span></button>
+      <button class="addzone" data-pick="ex" type="button"><b>＋ Ajouter tes variantes 1</b><span>Autant que tu veux. Le texte est repéré automatiquement en quelques secondes, sans clé.</span></button>
     </div>`;
 }
 let pickSlot = null;
@@ -888,11 +888,10 @@ async function takeFiles(slot, files) {
 }
 
 /* ---------- Claude locates the text of each variante 1 ---------- */
-let anaBusy = 0; const ANA_MAX = 3;
+let anaBusy = 0; const ANA_MAX = 2;
 async function runQueue() {
   if (anaBusy >= ANA_MAX || !sampleReady) return;
   const ex = S.examples.find(x => x.status === "queued"); if (!ex) return;
-  if (!sampleNS) { S.examples.forEach(x => { if (x.status === "queued") x.status = "manual"; }); renderDrops(); renderEditor(); return; }
   anaBusy++; ex.status = "reading"; ex.msg = ""; renderDrops(); renderEditor();
   runQueue(); // lance les suivantes en parallèle (jusqu’à 3)
   try {
@@ -920,7 +919,136 @@ async function grabFrames(url, times, width) {
   v.removeAttribute("src"); v.load();
   return { frames: out, w: c.width, h: c.height };
 }
+/* ---------- détection locale du texte incrusté (sans IA, sans Internet) ----------
+   Principe : un sous-titre de Reel = lettres claires bordées d'un contour/ombre sombre,
+   immobiles pendant que le décor bouge. On repère ces pixels sur des images de la vidéo,
+   on les regroupe en lignes, on suit les lignes dans le temps, puis on affine début/fin. */
+async function localDetect(url, D, onMsg) {
+  const AW = 360;
+  const v = document.createElement("video"); v.muted = true; v.preload = "auto"; v.playsInline = true; v.src = url;
+  await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error("vidéo illisible")); setTimeout(() => rej(new Error("vidéo trop lente à charger")), 20000); });
+  const W = AW, H = Math.round(AW * v.videoHeight / v.videoWidth), N = W * H;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const cx = cv.getContext("2d", { willReadFrequently: true });
+  const seek = t => new Promise(res => { const tt = Math.max(0, Math.min(D - 0.04, t)); if (Math.abs(v.currentTime - tt) < 0.001) return res(); const done = () => { v.removeEventListener("seeked", done); res(); }; v.addEventListener("seeked", done); v.currentTime = tt; setTimeout(done, 3000); });
+  const grab = async t => { await seek(t); cx.drawImage(v, 0, 0, W, H); const d = cx.getImageData(0, 0, W, H).data; const L = new Uint8Array(N); for (let i = 0, j = 0; i < N; i++, j += 4) L[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8; return { t, d, L }; };
+  // min / max locaux sur un carré (2r+1)², séparables
+  const filt = (L, r, isMax) => {
+    const a = new Uint8Array(N), b = new Uint8Array(N);
+    for (let y = 0; y < H; y++) { const o = y * W; for (let x = 0; x < W; x++) { let m = L[o + x]; for (let k = Math.max(0, x - r), e = Math.min(W - 1, x + r); k <= e; k++) { const q = L[o + k]; if (isMax ? q > m : q < m) m = q; } a[o + x] = m; } }
+    for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) { let m = a[y * W + x]; for (let k = Math.max(0, y - r), e = Math.min(H - 1, y + r); k <= e; k++) { const q = a[k * W + x]; if (isMax ? q > m : q < m) m = q; } b[y * W + x] = m; }
+    return b;
+  };
+  const masks = f => {
+    if (f.F) return f;
+    const mn = filt(f.L, 2, false), mx = filt(f.L, 2, true), F = new Uint8Array(N), S = new Uint8Array(N);
+    for (let i = 0; i < N; i++) { const l = f.L[i]; if (l >= 105 && l - mn[i] >= 85 && mn[i] <= 90) F[i] = 1; else if (l <= 75 && mx[i] - l >= 85) S[i] = 1; }
+    f.F = F; f.S = S; return f;
+  };
+  // 1) images régulières
+  const step = D <= 8 ? 0.33 : D <= 20 ? 0.5 : 0.8;
+  const times = []; for (let t = 0.05; t < D - 0.02; t += step) times.push(+t.toFixed(3));
+  if (times.length < 2) times.push(Math.max(0, D - 0.05));
+  const frames = [];
+  for (let i = 0; i < times.length; i++) { if (onMsg) onMsg(`Repérage du texte… ${Math.round(100 * i / times.length)} %`); frames.push(masks(await grab(times[i]))); }
+  // 2) pixels de texte = lettres/contour immobiles par rapport à une image voisine
+  const lineBoxes = frames.map((f, k) => {
+    const T = new Uint8Array(N), nb = [frames[k - 1], frames[k + 1]].filter(Boolean);
+    const textAt = () => false;
+    for (let i = 0; i < N; i++) if (f.F[i] || f.S[i]) { let ok = 0; for (const g of nb) if (Math.abs(g.L[i] - f.L[i]) <= 12 && (g.F[i] || g.S[i])) ok++; if (ok === nb.length || (ok && nb.length === 2 && !textAt(nb, i))) T[i] = 1; }
+    if (!nb.length) T.set(f.F);
+    // dilatation (relie les lettres d'une même ligne)
+    const rx = 5, ry = 0, Dm = new Uint8Array(N), tmp = new Uint8Array(N);
+    for (let y = 0; y < H; y++) { let run = -1e9; for (let x = 0; x < W; x++) { if (T[y * W + x]) run = x; if (x - run <= rx) tmp[y * W + x] = 1; } run = 1e9; for (let x = W - 1; x >= 0; x--) { if (T[y * W + x]) run = x; if (run - x <= rx) tmp[y * W + x] = 1; } }
+    for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) if (tmp[y * W + x]) for (let k = Math.max(0, y - ry); k <= Math.min(H - 1, y + ry); k++) Dm[k * W + x] = 1;
+    // composantes connexes
+    const lab = new Int32Array(N), out = []; let id = 0; const st = [];
+    for (let s = 0; s < N; s++) {
+      if (!Dm[s] || lab[s]) continue; id++; lab[s] = id; st.push(s); let x0 = W, y0 = H, x1 = 0, y1 = 0;
+      while (st.length) { const p = st.pop(), x = p % W, y = (p - x) / W; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (x > 0 && Dm[p - 1] && !lab[p - 1]) { lab[p - 1] = id; st.push(p - 1); } if (x < W - 1 && Dm[p + 1] && !lab[p + 1]) { lab[p + 1] = id; st.push(p + 1); }
+        if (y > 0 && Dm[p - W] && !lab[p - W]) { lab[p - W] = id; st.push(p - W); } if (y < H - 1 && Dm[p + W] && !lab[p + W]) { lab[p + W] = id; st.push(p + W); } }
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      if (h < H * 0.012 || h > H * 0.14 || w < W * 0.05 || w < h * 0.8) continue;
+      if (y0 < H * 0.04 || y1 > H * 0.97) continue; // barre d'état / bord
+      // signature « texte » : beaucoup d'alternances clair/sombre par ligne, densité moyenne
+      let trans = 0, rows = 0, fc = 0;
+      for (let y = y0; y <= y1; y++) { let prev = 0, tr = 0, any = 0; for (let x = x0; x <= x1; x++) { const q = f.F[y * W + x] && T[y * W + x]; if (q) { fc++; any = 1; } if (q && !prev) tr++; prev = q; } if (any) { rows++; trans += tr; } }
+      const dens = fc / (w * h);
+      if (rows < h * 0.3 || trans / Math.max(1, rows) < 3 || dens < 0.06 || dens > 0.75 || fc < 25) continue;
+      out.push([x0, y0, x1, y1]);
+    }
+    return out;
+  });
+  // 3) suivi dans le temps
+  const iou = (a, b) => { const ix = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])), iy = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1])), I = ix * iy; return I / ((a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - I || 1); };
+  const tracks = [];
+  lineBoxes.forEach((bs, k) => bs.forEach(b => {
+    const tr = tracks.find(T => T.last === k - 1 && iou(T.boxes[T.boxes.length - 1], b) > 0.35) || tracks.find(T => T.last === k - 2 && iou(T.boxes[T.boxes.length - 1], b) > 0.5);
+    if (tr) { tr.boxes.push(b); tr.ks.push(k); tr.last = k; } else tracks.push({ boxes: [b], ks: [k], first: k, last: k });
+  }));
+  const minFrames = frames.length <= 4 ? 1 : 2;
+  let lines = tracks.filter(T => T.ks.length >= minFrames).map(T => {
+    const med = i => { const a = T.boxes.map(b => b[i]).sort((x, y) => x - y); return a[a.length >> 1]; };
+    return { box: [med(0), med(1), med(2), med(3)], first: T.first, last: T.last, mid: T.ks[T.ks.length >> 1] };
+  });
+  // 4) lignes d'un même bloc (apparaissent/disparaissent ensemble et se touchent) → un seul sous-titre
+  lines.sort((a, b) => a.box[1] - b.box[1]);
+  const groups = [];
+  for (const l of lines) {
+    const lh = l.box[3] - l.box[1];
+    const g = groups.find(G => Math.abs(G.first - l.first) <= 1 && Math.abs(G.last - l.last) <= 1 && (
+      (l.box[1] - G.box[3] < lh * 0.9 && Math.min(G.box[2], l.box[2]) > Math.max(G.box[0], l.box[0])) ||                 // ligne suivante du même bloc
+      (Math.min(G.box[3], l.box[3]) - Math.max(G.box[1], l.box[1]) > lh * 0.5 && Math.max(G.box[0], l.box[0]) - Math.min(G.box[2], l.box[2]) < lh * 1.2))); // mot voisin sur la même ligne
+    if (g) { g.box = [Math.min(g.box[0], l.box[0]), Math.min(g.box[1], l.box[1]), Math.max(g.box[2], l.box[2]), Math.max(g.box[3], l.box[3])]; g.first = Math.min(g.first, l.first); g.last = Math.max(g.last, l.last); }
+    else groups.push({ ...l, box: [...l.box] });
+  }
+  // 5) couleurs (lettres, mot en couleur, contour) + signature pour affiner début/fin
+  const hexOf = a => "#" + a.map(x => Math.round(x).toString(16).padStart(2, "0")).join("").toUpperCase();
+  const median = arr => { if (!arr.length) return null; const r = [0, 1, 2].map(c => arr.map(p => p[c]).sort((x, y) => x - y)[arr.length >> 1]); return r; };
+  const caps = [];
+  for (const g of groups) {
+    const f = frames[g.mid], [x0, y0, x1, y1] = g.box, fill = [], strk = [];
+    const sig = [];
+    const others = [...new Set([g.first, g.last, g.first + 1, g.last - 1])].filter(k => k !== g.mid && k >= g.first && k <= g.last).map(k => frames[k]);
+    const steady = i => others.every(o => Math.abs(o.L[i] - f.L[i]) <= 10);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const i = y * W + x, j = i * 4; if (f.F[i]) { sig.push(i); if (steady(i)) fill.push([f.d[j], f.d[j + 1], f.d[j + 2], f.L[i]]); } else if (f.S[i] && steady(i)) strk.push([f.d[j], f.d[j + 1], f.d[j + 2]]); }
+    if (sig.length < 20 || fill.length < 10) continue;
+    const sat = p => { const mx = Math.max(...p), mn = Math.min(...p); return mx ? (mx - mn) / mx : 0; };
+    // lettres « pleines » seulement (pas les bords adoucis), puis 2 groupes : couleur principale / mot en couleur
+    const mxOf = p => Math.max(p[0], p[1], p[2]); const Ls = fill.map(mxOf).sort((a, b) => a - b), lTop = Ls[Math.floor(Ls.length * 0.95)] || 255; const core = fill.filter(p => mxOf(p) >= lTop * 0.8).map(p => p.slice(0, 3)); const px = core.length >= 20 ? core : fill;
+    const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    let main = median(px), hl = main;
+    let c1 = px[0], c2 = px.reduce((m, p) => dist(p, main) > dist(m, main) ? p : m, px[0]); c1 = main;
+    for (let it = 0; it < 6; it++) { const A = [], B = []; for (const p of px) (dist(p, c1) <= dist(p, c2) ? A : B).push(p); if (!A.length || !B.length) break; c1 = median(A); c2 = median(B); if (it === 5 && dist(c1, c2) > 90 && B.length > px.length * 0.15 && A.length > px.length * 0.15) [main, hl] = A.length >= B.length ? [c1, c2] : [c2, c1]; }
+    const stroke = strk.length > fill.length * 0.25 ? median(strk) : null;
+    // présence du sous-titre à l'instant t : ses pixels de lettres sont toujours là
+    const present = fr => { masks(fr); let ok = 0; for (const i of sig) if (fr.F[i] && Math.abs(fr.L[i] - f.L[i]) <= 30) ok++; return ok / sig.length > 0.55; };
+    const refine = async (tIn, tOut) => { for (let it = 0; it < 4; it++) { const tm = (tIn + tOut) / 2; if (present(await grab(tm))) tIn = tm; else tOut = tm; } return (tIn + tOut) / 2; };
+    if (onMsg) onMsg("Ajustement du début et de la fin…");
+    const start = g.first === 0 ? 0 : await refine(times[g.first], times[g.first - 1]);
+    const end = g.last === frames.length - 1 ? D : await refine(times[g.last], times[g.last + 1]);
+    const pad = 3;
+    caps.push({
+      text: "", start: +start.toFixed(2), end: +end.toFixed(2),
+      box: [Math.max(0, x0 - pad) / W, Math.max(0, y0 - pad) / H, Math.min(W, x1 + 1 + pad) / W, Math.min(H, y1 + 1 + pad) / H],
+      color: hexOf(main), highlight: hexOf(hl), stroke: stroke ? hexOf(stroke) : null, rotation: 0
+    });
+  }
+  v.removeAttribute("src"); v.load();
+  caps.sort((a, b) => a.start - b.start || a.box[1] - b.box[1]);
+  caps.forEach((c, i) => c.text = `Texte ${i + 1}`);
+  return caps;
+}
+
+/* Lecture du texte : d'abord la détection locale (rapide, sans clé), Gemini seulement en secours. */
 async function readCaptions(ex) {
+  let caps = [];
+  try { caps = await localDetect(ex.url, ex.dur, m => setExMsg(ex, m)); } catch (e) { console.warn("détection locale", e); }
+  if (caps.length) return capsToResult(caps, ex.dur);
+  if (sampleNS) { setExMsg(ex, "Texte peu visible : Gemini prend le relais…"); return readCaptionsGemini(ex); }
+  throw new Error("Aucun texte repéré automatiquement sur cette vidéo. Vérifie qu’elle contient bien du texte incrusté (ou ajoute une clé Gemini dans ⚙ Réglages en secours).");
+}
+async function readCaptionsGemini(ex) {
   const lim = await sampleNS.limits().catch(() => null);
   if (!lim || !lim.images) throw { code: "images_unavailable" };
   const maxImg = Math.min(18, lim.images.maxCount || 8);
@@ -953,7 +1081,10 @@ Reply with only JSON: {"captions":[{"text":"...","start":0,"end":2.5,"box":[0.1,
   let res;
   try { res = await sampleNS.json(prompt, { images: [...g.frames, ...origFrames], modelTier: "complex", onStatus: m => { curModel = m; tick(); } }); }
   finally { clearInterval(tickId); }
-  const caps = (res && Array.isArray(res.captions) ? res.captions : []).filter(k => k && typeof k.text === "string" && k.text.trim() && Array.isArray(k.box) && k.box.length === 4);
+  return capsToResult(res && Array.isArray(res.captions) ? res.captions : [], D);
+}
+function capsToResult(list, D) {
+  const caps = list.filter(k => k && typeof k.text === "string" && k.text.trim() && Array.isArray(k.box) && k.box.length === 4);
   if (!caps.length) throw new Error("Aucun texte trouvé sur cette vidéo. Vérifie qu’elle contient bien du texte incrusté.");
   return {
     captions: caps.map(k => {
