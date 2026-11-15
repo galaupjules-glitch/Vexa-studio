@@ -372,7 +372,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
   window.VX_gemErr = (status, body) => {
     const e = (body && body.error) || {}, msg = e.message || String(status);
     const reason = ((e.details || []).find(d => d.reason) || {}).reason || e.status || "";
-    const hint = reason === "ACCESS_TOKEN_TYPE_UNSUPPORTED" ? "Ce format de clé n’est pas accepté. Crée une clé classique qui commence par « AIza » : aistudio.google.com/apikey → Créer une clé API."
+    const hint = reason === "ACCESS_TOKEN_TYPE_UNSUPPORTED" ? "Clé refusée : elle est incomplète, supprimée, ou pas encore liée à un compte de service. Recopie-la en entier avec 📋, ou recrée-la (Google Cloud → Identifiants → Clé API → API « Generative Language API » → lier à un compte de service)."
       : reason === "API_KEY_INVALID" ? "Clé incorrecte ou incomplète : recopie-la en entier avec le bouton 📋 d’AI Studio."
       : reason === "ACCESS_DENIED" || reason === "API_KEY_SERVICE_BLOCKED" || /Permission denied|blocked/i.test(msg) ? "Cette clé n’a pas le droit d’utiliser Gemini (c’est peut-être la clé du sélecteur de dossier). Utilise la clé créée sur aistudio.google.com/apikey."
       : /SERVICE_DISABLED|has not been used|is disabled/i.test(msg + reason) ? "L’API Gemini n’est pas activée sur le projet de cette clé : crée la clé depuis aistudio.google.com/apikey."
