@@ -344,7 +344,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
     <label class="fld"><span>Clé Gemini (lecture du texte, depuis Google AI Studio)</span><input type="text" id="setGem" autocomplete="off"></label>
-    <label class="fld"><span>Modèle Gemini pour lire le texte</span><input type="text" id="setModel" autocomplete="off"></label>
+    <label class="fld"><span>Modèle Gemini pour lire le texte (« auto » = le meilleur modèle de ta clé)</span><input type="text" id="setModel" list="gemModels" autocomplete="off" placeholder="auto"><datalist id="gemModels"><option value="auto"></option></datalist><small id="gemInfo" class="muted"></small></label>
     <button class="btn primary" id="setSave" type="button">Enregistrer</button>
   </div>
 </div>
@@ -357,12 +357,30 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 (() => {
   const get = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
   // Valeurs du projet Google Cloud de Vexa (publiques par nature ; la clé API est limitée à ce site).
-  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "AIzaSyDB2CLjBMhclf7-1z9rJ-9AmDads1ty0JQ", geminiKey: "", model: "gemini-2.5-flash" };
+  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "AIzaSyDB2CLjBMhclf7-1z9rJ-9AmDads1ty0JQ", geminiKey: "", model: "auto" };
   const saved = get("vx-web-cfg", {});
   window.VX_CFG = Object.assign({}, DEFAULTS, Object.fromEntries(Object.entries(saved).filter(([k, v]) => v)));
   // Clé Gemini collée par erreur dans le champ du sélecteur : on la remet à sa place.
   if (/^AQ\./.test(window.VX_CFG.apiKey || "")) { if (!window.VX_CFG.geminiKey) window.VX_CFG.geminiKey = window.VX_CFG.apiKey; window.VX_CFG.apiKey = DEFAULTS.apiKey; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { } }
   const b64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
+  // Détection automatique des modèles autorisés par la clé (liste officielle de Google).
+  const SKIP = /tts|image|embed|live|audio|aqa|vision|learnlm|gemma|robotics|computer|native/i;
+  const rank = id => { const v = parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0); const kind = /flash/.test(id) && !/lite/.test(id) ? 3 : /pro/.test(id) ? 2 : /lite/.test(id) ? 1 : 0; return v * 10 + kind - (/preview|exp/.test(id) ? 0.5 : 0) + (/latest/.test(id) ? -0.2 : 0); };
+  const modelCache = {};
+  window.VX_listModels = async key => {
+    key = (key || "").trim(); if (!key) return [];
+    if (modelCache[key]) return modelCache[key];
+    const ids = []; let page = "";
+    for (let i = 0; i < 5; i++) {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" + (page ? "&pageToken=" + encodeURIComponent(page) : ""), { headers: { "x-goog-api-key": key } });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) { const e = new Error((b.error && b.error.message) || String(r.status)); e.status = r.status; throw e; }
+      for (const m of b.models || []) { const id = String(m.name || "").replace(/^models\//, ""); if (/^gemini-/.test(id) && !SKIP.test(id) && (m.supportedGenerationMethods || []).includes("generateContent")) ids.push(id); }
+      page = b.nextPageToken; if (!page) break;
+    }
+    ids.sort((a, b) => rank(b) - rank(a));
+    return (modelCache[key] = ids);
+  };
   const gemini = {
     limits: async () => ({ images: { maxCount: 16 } }),
     json: async (prompt, opts = {}) => {
@@ -373,7 +391,11 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       const parts = [{ text: prompt }];
       for (const im of opts.images || []) parts.push({ inline_data: { mime_type: im.type || "image/jpeg", data: await b64(im) } });
       // Délai max par essai + modèles de secours si le modèle choisi est lent, inconnu ou surchargé.
-      const models = [...new Set([(cfg.model || "").trim(), "gemini-flash-latest", "gemini-2.5-flash"].filter(Boolean))];
+      const want = (cfg.model || "").trim(), auto = !want || /^auto$/i.test(want);
+      let avail = []; try { avail = await window.VX_listModels(gkey); } catch (e) { if (e.status === 401 || e.status === 403) throw { code: "not_granted", message: "Gemini refuse la clé (" + e.message + "). Vérifie la clé collée dans ⚙ Réglages → « Clé Gemini » (aistudio.google.com/apikey)." }; }
+      // Choix demandé d'abord (s'il existe pour cette clé), puis les meilleurs modèles détectés, puis les valeurs sûres.
+      const cand = [...new Set([auto ? "" : want, ...avail.slice(0, 3), "gemini-flash-latest", "gemini-2.5-flash"].filter(Boolean))];
+      let models = cand.filter(m => avail.includes(m)); if (!models.length) models = cand; models = models.slice(0, 4);
       const call = async (model, thinking) => {
         const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 90000);
         const gen = { responseMimeType: "application/json", temperature: 0.1 };
@@ -1565,11 +1587,26 @@ $("#btnExportAll").onclick = async () => {
   } finally { setBusy(false); }
 };
 /* ---------- réglages ---------- */
-function openSettings() { $("#setClient").value = window.VX_CFG.clientId; $("#setKey").value = window.VX_CFG.apiKey; $("#setGem").value = window.VX_CFG.geminiKey || ""; $("#setModel").value = window.VX_CFG.model; $("#setDlg").hidden = false; }
+function openSettings() { $("#setClient").value = window.VX_CFG.clientId; $("#setKey").value = window.VX_CFG.apiKey; $("#setGem").value = window.VX_CFG.geminiKey || ""; $("#setModel").value = window.VX_CFG.model || "auto"; $("#setDlg").hidden = false; detectModels(); }
+let detT = 0;
+async function detectModels() {
+  const key = $("#setGem").value.trim(), info = $("#gemInfo"), dl = $("#gemModels");
+  if (!key) { info.textContent = "Colle ta clé Gemini : les modèles disponibles s’afficheront ici."; dl.innerHTML = '<option value="auto"></option>'; return; }
+  info.textContent = "Détection des modèles de ta clé…";
+  try {
+    const ids = await window.VX_listModels(key);
+    dl.innerHTML = '<option value="auto"></option>' + ids.map(i => `<option value="${i}"></option>`).join("");
+    info.textContent = ids.length ? `✓ Clé valide — ${ids.length} modèles. En « auto », le site utilise : ${ids[0]}.` : "Clé valide, mais aucun modèle Gemini utilisable trouvé.";
+    const m = $("#setModel").value.trim();
+    if (m && !/^auto$/i.test(m) && ids.length && !ids.includes(m)) info.textContent += ` ⚠ « ${m} » n’existe pas pour cette clé : il sera remplacé automatiquement.`;
+  } catch (e) { info.textContent = "✗ Clé refusée par Gemini : " + e.message; }
+}
+$("#setGem").addEventListener("input", () => { clearTimeout(detT); detT = setTimeout(detectModels, 600); });
+$("#setModel").addEventListener("change", detectModels);
 $("#btnSettings").onclick = openSettings;
 $("#setClose").onclick = () => { $("#setDlg").hidden = true; };
 $("#setSave").onclick = () => {
-  const c = $("#setClient").value.trim(), k = $("#setKey").value.trim(), gk = $("#setGem").value.trim(), m = $("#setModel").value.trim() || "gemini-2.5-flash";
+  const c = $("#setClient").value.trim(), k = $("#setKey").value.trim(), gk = $("#setGem").value.trim(), m = $("#setModel").value.trim() || "auto";
   if (c && !/\.apps\.googleusercontent\.com$/.test(c)) { toast("L’ID client doit se terminer par .apps.googleusercontent.com"); return; }
   const hadKey = !!window.VX_CFG.geminiKey;
   window.VX_CFG = { clientId: c, apiKey: k, geminiKey: gk, model: m }; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { }
