@@ -357,7 +357,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 (() => {
   const get = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
   // Valeurs du projet Google Cloud de Vexa (publiques par nature ; la clé API est limitée à ce site).
-  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "", geminiKey: "", model: "gemini-2.5-flash" };
+  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "AIzaSyDB2CLjBMhclf7-1z9rJ-9AmDads1ty0JQ", geminiKey: "", model: "gemini-2.5-flash" };
   const saved = get("vx-web-cfg", {});
   window.VX_CFG = Object.assign({}, DEFAULTS, Object.fromEntries(Object.entries(saved).filter(([k, v]) => v)));
   const b64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
