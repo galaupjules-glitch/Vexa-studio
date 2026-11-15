@@ -345,7 +345,8 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
     <label class="fld"><span>Clé Gemini (lecture du texte, depuis Google AI Studio)</span><input type="text" id="setGem" autocomplete="off"></label>
     <label class="fld"><span>Modèle Gemini pour lire le texte (« auto » = le meilleur modèle de ta clé)</span><input type="text" id="setModel" list="gemModels" autocomplete="off" placeholder="auto"><datalist id="gemModels"><option value="auto"></option></datalist><small id="gemInfo" class="muted"></small></label>
-    <button class="btn primary" id="setSave" type="button">Enregistrer</button>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="setTest" type="button">Tester Gemini</button><button class="btn primary" id="setSave" type="button">Enregistrer</button></div>
+    <p id="setTestOut" class="muted" style="white-space:pre-wrap;word-break:break-word;margin:6px 0 0"></p>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -367,6 +368,19 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
   const SKIP = /tts|image|embed|live|audio|aqa|vision|learnlm|gemma|robotics|computer|native/i;
   const rank = id => { const v = parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0); const kind = /flash/.test(id) && !/lite/.test(id) ? 3 : /pro/.test(id) ? 2 : /lite/.test(id) ? 1 : 0; return v * 10 + kind - (/preview|exp/.test(id) ? 0.5 : 0) + (/latest/.test(id) ? -0.2 : 0); };
   const modelCache = {};
+  // Traduit la réponse d'erreur de Google en explication claire.
+  window.VX_gemErr = (status, body) => {
+    const e = (body && body.error) || {}, msg = e.message || String(status);
+    const reason = ((e.details || []).find(d => d.reason) || {}).reason || e.status || "";
+    const hint = reason === "ACCESS_TOKEN_TYPE_UNSUPPORTED" ? "Ce format de clé n’est pas accepté. Crée une clé classique qui commence par « AIza » : aistudio.google.com/apikey → Créer une clé API."
+      : reason === "API_KEY_INVALID" ? "Clé incorrecte ou incomplète : recopie-la en entier avec le bouton 📋 d’AI Studio."
+      : reason === "ACCESS_DENIED" || reason === "API_KEY_SERVICE_BLOCKED" || /Permission denied|blocked/i.test(msg) ? "Cette clé n’a pas le droit d’utiliser Gemini (c’est peut-être la clé du sélecteur de dossier). Utilise la clé créée sur aistudio.google.com/apikey."
+      : /SERVICE_DISABLED|has not been used|is disabled/i.test(msg + reason) ? "L’API Gemini n’est pas activée sur le projet de cette clé : crée la clé depuis aistudio.google.com/apikey."
+      : /location|region|not supported/i.test(msg) ? "Gemini n’est pas disponible pour ce compte ou ce pays."
+      : status === 429 ? "Quota gratuit atteint : attends une minute."
+      : "";
+    return { msg, reason, text: msg + (reason ? " [" + reason + "]" : "") + (hint ? " → " + hint : "") };
+  };
   window.VX_listModels = async key => {
     key = (key || "").trim(); if (!key) return [];
     if (modelCache[key]) return modelCache[key];
@@ -375,7 +389,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
     for (let i = 0; i < 5; i++) {
       const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" + (page ? "&pageToken=" + encodeURIComponent(page) : ""), { headers: { "x-goog-api-key": key } });
       const b = await r.json().catch(() => ({}));
-      if (!r.ok) { const e = new Error((b.error && b.error.message) || String(r.status)); e.status = r.status; throw e; }
+      if (!r.ok) { const x = window.VX_gemErr(r.status, b); const e = new Error(x.text); e.status = r.status; e.reason = x.reason; throw e; }
       for (const m of b.models || []) { const id = String(m.name || "").replace(/^models\//, ""); if (/^gemini-/.test(id) && !SKIP.test(id) && (m.supportedGenerationMethods || []).includes("generateContent")) ids.push(id); }
       page = b.nextPageToken; if (!page) break;
     }
@@ -394,7 +408,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       for (const im of opts.images || []) parts.push({ inline_data: { mime_type: im.type || "image/jpeg", data: await b64(im) } });
       // Délai max par essai + modèles de secours si le modèle choisi est lent, inconnu ou surchargé.
       const want = (cfg.model || "").trim(), auto = !want || /^auto$/i.test(want);
-      let avail = []; try { avail = await window.VX_listModels(gkey); } catch (e) { if (e.status === 401 || e.status === 403) throw { code: "not_granted", message: "Gemini refuse la clé (" + e.message + "). Vérifie la clé collée dans ⚙ Réglages → « Clé Gemini » (aistudio.google.com/apikey)." }; }
+      let avail = []; try { avail = await window.VX_listModels(gkey); } catch (e) { if (e.status === 400 || e.status === 401 || e.status === 403) throw { code: "not_granted", message: "Gemini refuse la clé : " + e.message }; }
       // Choix demandé d'abord (s'il existe pour cette clé), puis les meilleurs modèles détectés, puis les valeurs sûres.
       const cand = [...new Set([auto ? "" : want, ...avail.slice(0, 3), "gemini-flash-latest", "gemini-2.5-flash"].filter(Boolean))];
       let models = cand.filter(m => avail.includes(m)); if (!models.length) models = cand; models = models.slice(0, 4);
@@ -419,9 +433,9 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
         if (res.r && res.r.status === 400 && /thinking/i.test(JSON.stringify(res.body))) res = await call(model, 2);
         if (res.r && res.r.status === 400 && /thinking/i.test(JSON.stringify(res.body))) res = await call(model, 0);
         if (res.netErr) { lastMsg = res.timeout ? `${model} n’a pas répondu en 30 s` : `connexion à Gemini impossible`; continue; }
-        const { r } = res, msg = (res.body.error && res.body.error.message) || String(r.status);
+        const { r } = res, ge = window.VX_gemErr(r.status, res.body), msg = ge.text;
         if (r.ok) { body = res.body; break; }
-        if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(msg))) throw { code: "not_granted", message: "Gemini refuse la clé (" + msg + "). Vérifie que la clé collée dans ⚙ Réglages → « Clé Gemini » est bien celle d'AI Studio (aistudio.google.com/apikey), copiée en entier." };
+        if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(msg))) throw { code: "not_granted", message: "Gemini refuse la clé : " + msg };
         if (r.status === 429) { lastMsg = "quota gratuit atteint"; continue; }
         lastMsg = `${model} : ${msg}`; // 404 modèle inconnu, 5xx surcharge… → modèle suivant
       }
@@ -885,7 +899,7 @@ async function runQueue() {
   } catch (err) {
     const code = err && err.code;
     ex.status = "error";
-    ex.msg = code === "not_granted" ? "Lecture refusée par Gemini. Vérifie ta clé API dans ⚙ Réglages, puis clique sur Relire."
+    ex.msg = code === "not_granted" ? ((err && err.message) || "Lecture refusée par Gemini.") + " (⚙ Réglages → Tester, puis Relire)"
       : code === "rate_limited" ? "Trop de demandes d’un coup. Clique sur Relire dans une minute."
       : code === "images_unavailable" ? "Lecture du texte indisponible : vérifie ta clé API dans ⚙ Réglages."
       : (err && err.message) || "La lecture a échoué.";
@@ -1608,6 +1622,20 @@ async function detectModels() {
     if (m && !/^auto$/i.test(m) && ids.length && !ids.includes(m)) info.textContent += ` ⚠ « ${m} » n’existe pas pour cette clé : il sera remplacé automatiquement.`;
   } catch (e) { info.textContent = "✗ Clé refusée par Gemini : " + e.message; }
 }
+$("#setTest").onclick = async () => {
+  const out = $("#setTestOut"), key = $("#setGem").value.trim(); let model = $("#setModel").value.trim();
+  if (!key) { out.textContent = "Colle d’abord ta clé Gemini."; return; }
+  out.textContent = "Test en cours…";
+  let ids = []; try { ids = await window.VX_listModels(key); } catch (e) { out.textContent = "✗ Liste des modèles refusée : " + e.message; return; }
+  if (!model || /^auto$/i.test(model) || (ids.length && !ids.includes(model))) model = ids[0] || "gemini-2.5-flash";
+  const t0 = performance.now();
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: 'Reply with only JSON: {"ok":true}' }] }], generationConfig: { responseMimeType: "application/json" } }) });
+    const b = await r.json().catch(() => ({}));
+    out.textContent = r.ok ? `✓ ${model} répond en ${((performance.now() - t0) / 1000).toFixed(1)} s. Tout est bon : clique sur Enregistrer.` : `✗ ${model} : ` + window.VX_gemErr(r.status, b).text;
+  } catch (e) { out.textContent = "✗ Connexion à Gemini impossible depuis ce navigateur (" + (e.message || e) + "). Désactive un bloqueur de pub/VPN pour ce site et réessaie."; }
+};
 $("#setGem").addEventListener("input", () => { clearTimeout(detT); detT = setTimeout(detectModels, 600); });
 $("#setModel").addEventListener("change", detectModels);
 $("#btnSettings").onclick = openSettings;
