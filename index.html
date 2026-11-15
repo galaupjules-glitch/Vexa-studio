@@ -355,7 +355,10 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 /* Hors de claude.ai : lecture du texte par Gemini (offre gratuite de Google), téléchargements normaux. */
 (() => {
   const get = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
-  window.VX_CFG = Object.assign({ clientId: "", apiKey: "", model: "gemini-2.5-flash" }, get("vx-web-cfg", {}));
+  // Valeurs du projet Google Cloud de Vexa (publiques par nature ; la clé API est limitée à ce site).
+  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "", model: "gemini-2.5-flash" };
+  const saved = get("vx-web-cfg", {});
+  window.VX_CFG = Object.assign({}, DEFAULTS, Object.fromEntries(Object.entries(saved).filter(([k, v]) => v)));
   const b64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
   const gemini = {
     limits: async () => ({ images: { maxCount: 16 } }),
@@ -750,7 +753,7 @@ function renderDrops() {
   $("#drops").innerHTML = `
     <div class="dsec" data-slot="orig">
       <div class="dsec-h"><h3>Vidéos originales <span class="tag">Référence</span></h3><span class="meta">${S.clips.length || ""}</span></div>
-      <p class="hint" style="margin:0">Le décor sans texte. Claude s’en sert pour bien distinguer ton texte de la scène. Elles ne sont pas réexportées.</p>
+      <p class="hint" style="margin:0">Le décor sans texte. Le Studio s’en sert pour bien distinguer ton texte de la scène. Elles ne sont pas réexportées.</p>
       <div class="src-list">${clipRows}</div>
       <button class="addzone" data-pick="orig" type="button"><b>＋ Ajouter des vidéos originales</b><span>Autant que tu veux.</span></button>
     </div>
