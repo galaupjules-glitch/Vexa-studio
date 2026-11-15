@@ -369,8 +369,9 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       if (!gkey) throw { code: "not_granted", message: "Clé Gemini manquante (⚙ Réglages)." };
       const parts = [{ text: prompt }];
       for (const im of opts.images || []) parts.push({ inline_data: { mime_type: im.type || "image/jpeg", data: await b64(im) } });
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || "gemini-2.5-flash")}:generateContent?key=${encodeURIComponent(gkey)}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      // La clé passe dans l'en-tête x-goog-api-key (format AIza… ou AQ… des clés AI Studio).
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || "gemini-2.5-flash")}:generateContent`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
         body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseMimeType: "application/json", temperature: 0.1 } })
       });
       const body = await r.json().catch(() => ({}));
