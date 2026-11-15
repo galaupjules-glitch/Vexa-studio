@@ -411,7 +411,8 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       let avail = []; try { avail = await window.VX_listModels(gkey); } catch (e) { if (e.status === 400 || e.status === 401 || e.status === 403) throw { code: "not_granted", message: "Gemini refuse la clé : " + e.message }; }
       // Choix demandé d'abord (s'il existe pour cette clé), puis les meilleurs modèles détectés, puis les valeurs sûres.
       const cand = [...new Set([auto ? "" : want, ...avail.slice(0, 3), "gemini-flash-latest", "gemini-2.5-flash"].filter(Boolean))];
-      let models = cand.filter(m => avail.includes(m)); if (!models.length) models = cand; models = models.slice(0, 4);
+      let models = cand.filter(m => avail.includes(m)); if (!models.length) models = cand;
+      const busy = window.VX_busy || {}; models = [...models.filter(m => !(busy[m] > Date.now())), ...models.filter(m => busy[m] > Date.now())].slice(0, 4);
       const call = async (model, thinking) => {
         const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 30000);
         const gen = { responseMimeType: "application/json", temperature: 0.1 };
@@ -436,8 +437,9 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
         const { r } = res, ge = window.VX_gemErr(r.status, res.body), msg = ge.text;
         if (r.ok) { body = res.body; break; }
         if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(msg))) throw { code: "not_granted", message: "Gemini refuse la clé : " + msg };
-        if (r.status === 429) { lastMsg = "quota gratuit atteint"; continue; }
+        if (r.status === 429) { lastMsg = "quota gratuit atteint"; (window.VX_busy = window.VX_busy || {})[model] = Date.now() + 600000; continue; }
         lastMsg = `${model} : ${msg}`; // 404 modèle inconnu, 5xx surcharge… → modèle suivant
+        if (r.status >= 500 || r.status === 429) (window.VX_busy = window.VX_busy || {})[model] = Date.now() + 600000;
       }
       if (!body) throw { code: /quota/.test(lastMsg) ? "rate_limited" : "upstream_error", message: "Gemini : " + lastMsg + ". Clique sur Relire." };
       const txt = ((((body.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("");
@@ -1627,13 +1629,20 @@ $("#setTest").onclick = async () => {
   if (!key) { out.textContent = "Colle d’abord ta clé Gemini."; return; }
   out.textContent = "Test en cours…";
   let ids = []; try { ids = await window.VX_listModels(key); } catch (e) { out.textContent = "✗ Liste des modèles refusée : " + e.message; return; }
-  if (!model || /^auto$/i.test(model) || (ids.length && !ids.includes(model))) model = ids[0] || "gemini-2.5-flash";
-  const t0 = performance.now();
+  const list = [...new Set([(!model || /^auto$/i.test(model) || (ids.length && !ids.includes(model))) ? "" : model, ...ids.slice(0, 4), "gemini-2.5-flash"].filter(Boolean))];
+  const notes = [];
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: 'Reply with only JSON: {"ok":true}' }] }], generationConfig: { responseMimeType: "application/json" } }) });
-    const b = await r.json().catch(() => ({}));
-    out.textContent = r.ok ? `✓ ${model} répond en ${((performance.now() - t0) / 1000).toFixed(1)} s. Tout est bon : clique sur Enregistrer.` : `✗ ${model} : ` + window.VX_gemErr(r.status, b).text;
+    for (const m of list) {
+      out.textContent = "Test en cours… " + m; const t0 = performance.now();
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: 'Reply with only JSON: {"ok":true}' }] }], generationConfig: { responseMimeType: "application/json" } }) });
+      const b = await r.json().catch(() => ({}));
+      if (r.ok) { out.textContent = `✓ Clé valide. ${m} répond en ${((performance.now() - t0) / 1000).toFixed(1)} s.` + (notes.length ? `\n(${notes.join(" ; ")} → le site passe automatiquement au modèle suivant)` : "") + "\nClique sur Enregistrer."; return; }
+      const ge = window.VX_gemErr(r.status, b);
+      if (r.status === 401 || r.status === 403 || (r.status === 400 && /key/i.test(ge.msg))) { out.textContent = `✗ ${m} : ` + ge.text; return; }
+      notes.push(`${m} : ${r.status >= 500 ? "surchargé" : r.status === 429 ? "quota atteint" : ge.msg}`);
+    }
+    out.textContent = "Clé valide, mais aucun modèle disponible pour le moment :\n" + notes.join("\n") + "\nRéessaie dans quelques minutes.";
   } catch (e) { out.textContent = "✗ Connexion à Gemini impossible depuis ce navigateur (" + (e.message || e) + "). Désactive un bloqueur de pub/VPN pour ce site et réessaie."; }
 };
 $("#setGem").addEventListener("input", () => { clearTimeout(detT); detT = setTimeout(detectModels, 600); });
