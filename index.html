@@ -370,6 +370,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
   window.VX_listModels = async key => {
     key = (key || "").trim(); if (!key) return [];
     if (modelCache[key]) return modelCache[key];
+    try { const c = JSON.parse(localStorage.getItem("vx-models") || "null"); if (c && c.k === key.slice(-8) && Date.now() - c.t < 864e5 && c.ids.length) return (modelCache[key] = c.ids); } catch (e) { }
     const ids = []; let page = "";
     for (let i = 0; i < 5; i++) {
       const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" + (page ? "&pageToken=" + encodeURIComponent(page) : ""), { headers: { "x-goog-api-key": key } });
@@ -379,6 +380,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       page = b.nextPageToken; if (!page) break;
     }
     ids.sort((a, b) => rank(b) - rank(a));
+    try { localStorage.setItem("vx-models", JSON.stringify({ k: key.slice(-8), t: Date.now(), ids })); } catch (e) { }
     return (modelCache[key] = ids);
   };
   const gemini = {
@@ -397,9 +399,10 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       const cand = [...new Set([auto ? "" : want, ...avail.slice(0, 3), "gemini-flash-latest", "gemini-2.5-flash"].filter(Boolean))];
       let models = cand.filter(m => avail.includes(m)); if (!models.length) models = cand; models = models.slice(0, 4);
       const call = async (model, thinking) => {
-        const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 90000);
+        const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 30000);
         const gen = { responseMimeType: "application/json", temperature: 0.1 };
-        if (thinking) gen.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 512 } : { thinkingLevel: "low" };
+        // Pas de « réflexion » : repérer un texte court n'en a pas besoin, et c'est ce qui prend le plus de temps.
+        if (thinking) gen.thinkingConfig = /^gemini-2\./.test(model) ? (/pro/.test(model) ? { thinkingBudget: 128 } : { thinkingBudget: 0 }) : { thinkingLevel: thinking === 2 ? "low" : "minimal" };
         try {
           const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
             method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
@@ -412,9 +415,10 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       let body = null, lastMsg = "";
       for (const model of models) {
         if (opts.onStatus) opts.onStatus(model);
-        let res = await call(model, true);
-        if (res.r && res.r.status === 400 && /thinking/i.test(JSON.stringify(res.body))) res = await call(model, false);
-        if (res.netErr) { lastMsg = res.timeout ? `${model} n’a pas répondu en 90 s` : `connexion à Gemini impossible`; continue; }
+        let res = await call(model, 1);
+        if (res.r && res.r.status === 400 && /thinking/i.test(JSON.stringify(res.body))) res = await call(model, 2);
+        if (res.r && res.r.status === 400 && /thinking/i.test(JSON.stringify(res.body))) res = await call(model, 0);
+        if (res.netErr) { lastMsg = res.timeout ? `${model} n’a pas répondu en 30 s` : `connexion à Gemini impossible`; continue; }
         const { r } = res, msg = (res.body.error && res.body.error.message) || String(r.status);
         if (r.ok) { body = res.body; break; }
         if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(msg))) throw { code: "not_granted", message: "Gemini refuse la clé (" + msg + "). Vérifie que la clé collée dans ⚙ Réglages → « Clé Gemini » est bien celle d'AI Studio (aistudio.google.com/apikey), copiée en entier." };
@@ -867,12 +871,13 @@ async function takeFiles(slot, files) {
 }
 
 /* ---------- Claude locates the text of each variante 1 ---------- */
-let anaBusy = false;
+let anaBusy = 0; const ANA_MAX = 3;
 async function runQueue() {
-  if (anaBusy || !sampleReady) return;
+  if (anaBusy >= ANA_MAX || !sampleReady) return;
   const ex = S.examples.find(x => x.status === "queued"); if (!ex) return;
   if (!sampleNS) { S.examples.forEach(x => { if (x.status === "queued") x.status = "manual"; }); renderDrops(); renderEditor(); return; }
-  anaBusy = true; ex.status = "reading"; ex.msg = ""; renderDrops(); renderEditor();
+  anaBusy++; ex.status = "reading"; ex.msg = ""; renderDrops(); renderEditor();
+  runQueue(); // lance les suivantes en parallèle (jusqu’à 3)
   try {
     ex.result = await readCaptions(ex);
     ex.status = "done";
@@ -885,8 +890,8 @@ async function runQueue() {
       : code === "images_unavailable" ? "Lecture du texte indisponible : vérifie ta clé API dans ⚙ Réglages."
       : (err && err.message) || "La lecture a échoué.";
   } finally {
-    anaBusy = false; renderDrops(); renderEditor(); dirty = true;
-    if (!S.examples.some(x => x.status === "queued")) autoBatch();
+    anaBusy--; renderDrops(); renderEditor(); dirty = true;
+    if (!S.examples.some(x => x.status === "queued" || x.status === "reading")) autoBatch();
     runQueue();
   }
 }
@@ -894,7 +899,7 @@ async function grabFrames(url, times, width) {
   const v = document.createElement("video"); v.muted = true; v.preload = "auto"; v.src = url; await once(v, "loadeddata");
   const c = document.createElement("canvas"); c.width = width; c.height = Math.round(width * v.videoHeight / v.videoWidth); const cx = c.getContext("2d");
   const out = [];
-  for (const t of times) { v.currentTime = clamp(t, 0, v.duration - 0.05); await once(v, "seeked"); cx.drawImage(v, 0, 0, c.width, c.height); out.push(await new Promise(r => c.toBlob(r, "image/jpeg", 0.88))); }
+  for (const t of times) { v.currentTime = clamp(t, 0, v.duration - 0.05); await once(v, "seeked"); cx.drawImage(v, 0, 0, c.width, c.height); out.push(await new Promise(r => c.toBlob(r, "image/jpeg", 0.8))); }
   v.removeAttribute("src"); v.load();
   return { frames: out, w: c.width, h: c.height };
 }
@@ -902,11 +907,13 @@ async function readCaptions(ex) {
   const lim = await sampleNS.limits().catch(() => null);
   if (!lim || !lim.images) throw { code: "images_unavailable" };
   const maxImg = Math.min(18, lim.images.maxCount || 8);
-  const nOrig = Math.min(S.clips.length ? 2 : 0, Math.max(0, maxImg - 4));
-  const D = ex.dur, n = clamp(Math.ceil(D / 1), 4, maxImg - nOrig);
+  // Rapide : 3 à 6 images légères suffisent pour des textes courts (≤ 15 mots).
+  if (window.VX_listModels) window.VX_listModels(window.VX_CFG.geminiKey).catch(() => { }); // prépare la liste des modèles en parallèle
+  const nOrig = 0;
+  const D = ex.dur, n = clamp(Math.round(D / 1.5), 3, Math.min(6, maxImg));
   setExMsg(ex, "Extraction des images…");
   const times = Array.from({ length: n }, (_, k) => +((k + 0.5) * D / n).toFixed(2));
-  const g = await grabFrames(ex.url, times, 720);
+  const g = await grabFrames(ex.url, times, 576);
   const origFrames = [];
   for (let i = 0; i < nOrig; i++) { const c = S.clips[i % S.clips.length]; const o = await grabFrames(c.url, [c.dur * (i ? 0.6 : 0.3)], 540); origFrames.push(...o.frames); }
   const t0 = Date.now(); let curModel = "";
