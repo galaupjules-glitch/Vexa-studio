@@ -340,7 +340,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-15 d (détection locale)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-15 e (projet automatique)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -359,8 +359,10 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 (() => {
   const get = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
   // Valeurs du projet Google Cloud de Vexa (publiques par nature ; la clé API est limitée à ce site).
-  const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "AIzaSyDB2CLjBMhclf7-1z9rJ-9AmDads1ty0JQ", geminiKey: "", model: "auto" };
+  const DEFAULTS = { clientId: "1090358165690-1cmarr0jpqhr664lm68043s8t42g1ib0.apps.googleusercontent.com", apiKey: "AIzaSyB37_Frl9fP4jkN3XZSlM2UJNWHdXKfWAs", geminiKey: "", model: "auto" };
   const saved = get("vx-web-cfg", {});
+  // Ancien projet Google (1054202664361) abandonné : on oublie l'ancien ID client et l'ancienne clé du sélecteur enregistrés.
+  if (/^1054202664361-/.test(saved.clientId || "") || saved.apiKey === "AIzaSyDB2CLjBMhclf7-1z9rJ-9AmDads1ty0JQ") { delete saved.clientId; delete saved.apiKey; try { localStorage.setItem("vx-web-cfg", JSON.stringify(saved)); localStorage.removeItem("vx-folder"); } catch (e) { } }
   window.VX_CFG = Object.assign({}, DEFAULTS, Object.fromEntries(Object.entries(saved).filter(([k, v]) => v)));
   // Clé Gemini collée par erreur dans le champ du sélecteur : on la remet à sa place.
   if (/^AQ\./.test(window.VX_CFG.apiKey || "")) { if (!window.VX_CFG.geminiKey) window.VX_CFG.geminiKey = window.VX_CFG.apiKey; window.VX_CFG.apiKey = DEFAULTS.apiKey; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { } }
