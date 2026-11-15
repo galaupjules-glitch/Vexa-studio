@@ -360,13 +360,16 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
   const DEFAULTS = { clientId: "1054202664361-686n42qgjj0i0it7aqk87va7k2ios8u7.apps.googleusercontent.com", apiKey: "AIzaSyDB2CLjBMhclf7-1z9rJ-9AmDads1ty0JQ", geminiKey: "", model: "gemini-2.5-flash" };
   const saved = get("vx-web-cfg", {});
   window.VX_CFG = Object.assign({}, DEFAULTS, Object.fromEntries(Object.entries(saved).filter(([k, v]) => v)));
+  // Clé Gemini collée par erreur dans le champ du sélecteur : on la remet à sa place.
+  if (/^AQ\./.test(window.VX_CFG.apiKey || "")) { if (!window.VX_CFG.geminiKey) window.VX_CFG.geminiKey = window.VX_CFG.apiKey; window.VX_CFG.apiKey = DEFAULTS.apiKey; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { } }
   const b64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
   const gemini = {
     limits: async () => ({ images: { maxCount: 16 } }),
     json: async (prompt, opts = {}) => {
       const cfg = window.VX_CFG;
-      const gkey = cfg.geminiKey || cfg.apiKey;
-      if (!gkey) throw { code: "not_granted", message: "Clé Gemini manquante (⚙ Réglages)." };
+      // Uniquement la clé Gemini (AI Studio) : la clé du sélecteur de dossier n'a pas le droit d'utiliser Gemini.
+      const gkey = (cfg.geminiKey || "").trim();
+      if (!gkey) throw { code: "not_granted", message: "Clé Gemini manquante : colle ta clé AI Studio dans ⚙ Réglages → « Clé Gemini »." };
       const parts = [{ text: prompt }];
       for (const im of opts.images || []) parts.push({ inline_data: { mime_type: im.type || "image/jpeg", data: await b64(im) } });
       // La clé passe dans l'en-tête x-goog-api-key (format AIza… ou AQ… des clés AI Studio).
@@ -376,13 +379,18 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       });
       const body = await r.json().catch(() => ({}));
       if (r.status === 429) throw { code: "rate_limited", message: "Quota gratuit de Gemini atteint pour le moment : réessaie dans une minute." };
-      if (!r.ok) throw { code: "upstream_error", message: "Gemini : " + ((body.error && body.error.message) || r.status) };
+      if (!r.ok) {
+        const msg = (body.error && body.error.message) || String(r.status);
+        if (r.status === 403 || r.status === 401 || r.status === 400 && /API key/i.test(msg)) throw { code: "not_granted", message: "Gemini refuse la clé (" + msg + "). Vérifie que la clé collée dans ⚙ Réglages → « Clé Gemini » est bien celle d'AI Studio (aistudio.google.com → Get API key), copiée en entier." };
+        if (r.status === 404) throw { code: "upstream_error", message: "Modèle Gemini introuvable : mets « gemini-flash-latest » dans ⚙ Réglages → Modèle." };
+        throw { code: "upstream_error", message: "Gemini : " + msg };
+      }
       const txt = ((((body.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("");
       try { return JSON.parse(txt); } catch (e) { const m = txt.match(/[\[{][\s\S]*[\]}]/); if (m) return JSON.parse(m[0]); throw { code: "invalid_json", message: "Réponse illisible de Gemini." }; }
     }
   };
   const downloads = { save: async ({ filename, data }) => { const blob = data instanceof Blob ? data : new Blob([data]); const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000); return { status: "saved" }; } };
-  window.claude = { use: async n => n === "sample" ? ((window.VX_CFG.geminiKey || window.VX_CFG.apiKey) ? gemini : null) : n === "downloads" ? downloads : null };
+  window.claude = { use: async n => n === "sample" ? (window.VX_CFG.geminiKey ? gemini : null) : n === "downloads" ? downloads : null };
 })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async></script>
@@ -733,7 +741,7 @@ function exStatusText(ex) {
     reading: ex.msg || "Gemini repère le texte…",
     done: ex.result ? `✓ ${ex.result.captions.length} texte${ex.result.captions.length > 1 ? "s" : ""} repéré${ex.result.captions.length > 1 ? "s" : ""} · ${S.variants.filter(v => v.exId === ex.id).length} variante(s) 2` : "",
     error: ex.msg || "La lecture a échoué.",
-    manual: "Lecture automatique indisponible : ajoute ta clé API Google dans ⚙ Réglages."
+    manual: "Lecture automatique indisponible : colle ta clé Gemini (AI Studio) dans ⚙ Réglages → « Clé Gemini »."
   })[ex.status] || "";
 }
 function setExMsg(ex, msg) { ex.msg = msg; const el = document.querySelector(`[data-exst="${ex.id}"]`); if (el) el.textContent = exStatusText(ex); }
@@ -764,7 +772,7 @@ function renderDrops() {
       <div class="dsec-h"><h3>Variantes 1 <span class="tag y">Tes montages</span></h3><span class="meta">${S.examples.length || ""}</span></div>
       <p class="hint" style="margin:0">Les vidéos que tu as montées avec ton texte. Chaque variante 2 est une copie de l’une d’elles avec une autre couleur de texte.</p>
       <div class="src-list">${exRows}</div>
-      <button class="addzone" data-pick="ex" type="button"><b>＋ Ajouter tes variantes 1</b><span>${sampleReady && !sampleNS ? "Lecture automatique indisponible : ajoute ta clé API Google dans ⚙ Réglages." : "Autant que tu veux. Gemini repère le texte de chacune."}</span></button>
+      <button class="addzone" data-pick="ex" type="button"><b>＋ Ajouter tes variantes 1</b><span>${sampleReady && !sampleNS ? "Lecture automatique indisponible : colle ta clé Gemini (AI Studio) dans ⚙ Réglages → « Clé Gemini »." : "Autant que tu veux. Gemini repère le texte de chacune."}</span></button>
     </div>`;
 }
 let pickSlot = null;
@@ -1544,10 +1552,10 @@ $("#setClose").onclick = () => { $("#setDlg").hidden = true; };
 $("#setSave").onclick = () => {
   const c = $("#setClient").value.trim(), k = $("#setKey").value.trim(), gk = $("#setGem").value.trim(), m = $("#setModel").value.trim() || "gemini-2.5-flash";
   if (c && !/\.apps\.googleusercontent\.com$/.test(c)) { toast("L’ID client doit se terminer par .apps.googleusercontent.com"); return; }
-  const hadKey = !!(window.VX_CFG.geminiKey || window.VX_CFG.apiKey);
+  const hadKey = !!window.VX_CFG.geminiKey;
   window.VX_CFG = { clientId: c, apiKey: k, geminiKey: gk, model: m }; try { localStorage.setItem("vx-web-cfg", JSON.stringify(window.VX_CFG)); } catch (e) { }
   $("#setDlg").hidden = true;
-  if (!hadKey && (gk || k)) { toast("Réglages enregistrés. La page se recharge pour activer la lecture du texte."); setTimeout(() => location.reload(), 1200); } else toast("Réglages enregistrés.");
+  if (!hadKey && gk) { toast("Réglages enregistrés. La page se recharge pour activer la lecture du texte."); setTimeout(() => location.reload(), 1200); } else toast("Réglages enregistrés.");
 };
 
 
