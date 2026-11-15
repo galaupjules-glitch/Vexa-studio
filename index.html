@@ -372,19 +372,34 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
       if (!gkey) throw { code: "not_granted", message: "Clé Gemini manquante : colle ta clé AI Studio dans ⚙ Réglages → « Clé Gemini »." };
       const parts = [{ text: prompt }];
       for (const im of opts.images || []) parts.push({ inline_data: { mime_type: im.type || "image/jpeg", data: await b64(im) } });
-      // La clé passe dans l'en-tête x-goog-api-key (format AIza… ou AQ… des clés AI Studio).
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || "gemini-2.5-flash")}:generateContent`, {
-        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
-        body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseMimeType: "application/json", temperature: 0.1 } })
-      });
-      const body = await r.json().catch(() => ({}));
-      if (r.status === 429) throw { code: "rate_limited", message: "Quota gratuit de Gemini atteint pour le moment : réessaie dans une minute." };
-      if (!r.ok) {
-        const msg = (body.error && body.error.message) || String(r.status);
-        if (r.status === 403 || r.status === 401 || r.status === 400 && /API key/i.test(msg)) throw { code: "not_granted", message: "Gemini refuse la clé (" + msg + "). Vérifie que la clé collée dans ⚙ Réglages → « Clé Gemini » est bien celle d'AI Studio (aistudio.google.com → Get API key), copiée en entier." };
-        if (r.status === 404) throw { code: "upstream_error", message: "Modèle Gemini introuvable : mets « gemini-flash-latest » dans ⚙ Réglages → Modèle." };
-        throw { code: "upstream_error", message: "Gemini : " + msg };
+      // Délai max par essai + modèles de secours si le modèle choisi est lent, inconnu ou surchargé.
+      const models = [...new Set([(cfg.model || "").trim(), "gemini-flash-latest", "gemini-2.5-flash"].filter(Boolean))];
+      const call = async (model, thinking) => {
+        const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 90000);
+        const gen = { responseMimeType: "application/json", temperature: 0.1 };
+        if (thinking) gen.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 512 } : { thinkingLevel: "low" };
+        try {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
+            body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: gen })
+          });
+          return { r, body: await r.json().catch(() => ({})) };
+        } catch (e) { return { timeout: e && e.name === "AbortError", netErr: true }; }
+        finally { clearTimeout(to); }
+      };
+      let body = null, lastMsg = "";
+      for (const model of models) {
+        if (opts.onStatus) opts.onStatus(model);
+        let res = await call(model, true);
+        if (res.r && res.r.status === 400 && /thinking/i.test(JSON.stringify(res.body))) res = await call(model, false);
+        if (res.netErr) { lastMsg = res.timeout ? `${model} n’a pas répondu en 90 s` : `connexion à Gemini impossible`; continue; }
+        const { r } = res, msg = (res.body.error && res.body.error.message) || String(r.status);
+        if (r.ok) { body = res.body; break; }
+        if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(msg))) throw { code: "not_granted", message: "Gemini refuse la clé (" + msg + "). Vérifie que la clé collée dans ⚙ Réglages → « Clé Gemini » est bien celle d'AI Studio (aistudio.google.com/apikey), copiée en entier." };
+        if (r.status === 429) { lastMsg = "quota gratuit atteint"; continue; }
+        lastMsg = `${model} : ${msg}`; // 404 modèle inconnu, 5xx surcharge… → modèle suivant
       }
+      if (!body) throw { code: /quota/.test(lastMsg) ? "rate_limited" : "upstream_error", message: "Gemini : " + lastMsg + ". Clique sur Relire." };
       const txt = ((((body.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("");
       try { return JSON.parse(txt); } catch (e) { const m = txt.match(/[\[{][\s\S]*[\]}]/); if (m) return JSON.parse(m[0]); throw { code: "invalid_json", message: "Réponse illisible de Gemini." }; }
     }
@@ -872,7 +887,9 @@ async function readCaptions(ex) {
   const g = await grabFrames(ex.url, times, 720);
   const origFrames = [];
   for (let i = 0; i < nOrig; i++) { const c = S.clips[i % S.clips.length]; const o = await grabFrames(c.url, [c.dur * (i ? 0.6 : 0.3)], 540); origFrames.push(...o.frames); }
-  setExMsg(ex, `Gemini repère le texte sur ${n} images…`);
+  const t0 = Date.now(); let curModel = "";
+  const tick = () => setExMsg(ex, `Gemini repère le texte sur ${n} images… ${Math.round((Date.now() - t0) / 1000)} s${curModel ? " (" + curModel + ")" : ""}`);
+  tick(); const tickId = setInterval(tick, 1000);
   const prompt = `You help a video editor recolor the burned-in caption text of an Instagram Reel without changing anything else. To do it, the software needs the exact location and colors of every caption.
 The first ${n} images are frames, in order, from the edited video (${g.w}x${g.h}, ${D.toFixed(2)} s). Frame times in seconds: ${times.join(", ")}.${nOrig ? `
 The last ${nOrig} image(s) are frames from the ORIGINAL footage before captions were added. Use them only to tell apart caption overlays from text or objects that are part of the scene (signs, clothes, screens): never return scene text.` : ""}
@@ -887,7 +904,9 @@ For each caption:
 - "stroke": the outline or shadow color right around the letters, hex, or null if the letters sit directly on the video.
 - "rotation": degrees, positive clockwise.
 Reply with only JSON: {"captions":[{"text":"...","start":0,"end":2.5,"box":[0.1,0.2,0.9,0.3],"color":"#FFFFFF","highlight":"#FFFFFF","stroke":"#000000","rotation":0}]}`;
-  const res = await sampleNS.json(prompt, { images: [...g.frames, ...origFrames], modelTier: "complex" });
+  let res;
+  try { res = await sampleNS.json(prompt, { images: [...g.frames, ...origFrames], modelTier: "complex", onStatus: m => { curModel = m; tick(); } }); }
+  finally { clearInterval(tickId); }
   const caps = (res && Array.isArray(res.captions) ? res.captions : []).filter(k => k && typeof k.text === "string" && k.text.trim() && Array.isArray(k.box) && k.box.length === 4);
   if (!caps.length) throw new Error("Aucun texte trouvé sur cette vidéo. Vérifie qu’elle contient bien du texte incrusté.");
   return {
