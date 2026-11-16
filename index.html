@@ -285,7 +285,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
             <button class="btn primary" id="btnGen" type="button">Générer 10 variantes au total</button>
           </div>
           <p class="hint" style="margin:0">Le total est réparti entre toutes tes variantes 1. Chaque variante 2 garde ta vidéo à l’identique (montage, son, fond, place du texte) : seul le texte change, avec une autre couleur et, si tu le coches, une autre police. À chaque clic, les variantes non retouchées sont remplacées.</p>
-          <label class="chk opt-auto"><input type="checkbox" id="optAuto" checked> Créer les variantes 2 automatiquement dès que Claude a lu tes variantes 1</label>
+          <label class="chk opt-auto"><input type="checkbox" id="optAuto" checked> Créer les variantes 2 automatiquement dès que le texte de tes variantes 1 est repéré</label>
           <div>
             <div class="eyebrow" style="margin-bottom:6px">Couleurs utilisées</div>
             <div class="palette" id="palette"></div>
@@ -346,7 +346,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-16 b (polices)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-16 c (polices)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -592,7 +592,7 @@ function exportRenderer(W, H) {
 }
 let dirty = true, playing = false;
 let _cc = null;
-function compCanvas(W, H) { if (!_cc) { const cv = document.createElement("canvas"); _cc = { cv, ctx: cv.getContext("2d", { willReadFrequently: true }) }; } if (_cc.cv.width !== W || _cc.cv.height !== H) { _cc.cv.width = W; _cc.cv.height = H; } return _cc; }
+function compCanvas(W, H) { if (!_cc) { const cv = document.createElement("canvas"); _cc = { cv, ctx: cv.getContext("2d") }; } if (_cc.cv.width !== W || _cc.cv.height !== H) { _cc.cv.width = W; _cc.cv.height = H; } return _cc; }
 const curEx = () => exOf(current());
 const curEl = () => { const ex = curEx(); return ex && ex.el; };
 function setStageSize() {
@@ -744,7 +744,7 @@ function renderEditor() {
         <label class="chk"><input type="checkbox" id="vStrokeOn" ${v.strokeOn !== false ? "checked" : ""}> Contour</label>
         <label class="fld"><span>Taille · ${Math.round((v.size || 1) * 100)} %</span><input type="range" id="vSize" min="0.7" max="1.3" step="0.02" value="${v.size || 1}"></label>` : ""}
       </div>
-      <span class="hint">Couleur par texte (laisse tel quel pour suivre la couleur de la variante) :</span>
+      <span class="hint">Texte (corrige les mots si besoin, une ligne par ligne de la vidéo) et couleur de chaque texte :</span>
       <div class="caps">${caps.map((c, i) => { const col = colorsFor(v, c); return `
         <div class="cap" data-id="${c.id}">
           <div class="cap-line"><span class="cap-n">#${i + 1}</span>${v.font ? `<textarea class="cap-text" data-f="text" rows="${Math.max(1, String(c.text).split("\n").length)}" aria-label="Texte ${i + 1}" placeholder="Écris le texte exact">${esc(c.text)}</textarea>` : `<span class="cap-label">${esc(c.text)}</span>`}</div>
@@ -846,7 +846,7 @@ function renderDrops() {
   $("#drops").innerHTML = `
     <div class="dsec" data-slot="ex">
       <div class="dsec-h"><h3>Variantes 1 <span class="tag y">Tes montages</span></h3><span class="meta">${S.examples.length || ""}</span></div>
-      <p class="hint" style="margin:0">Les vidéos que tu as montées avec ton texte. Chaque variante 2 est une copie de l’une d’elles avec une autre couleur de texte.</p>
+      <p class="hint" style="margin:0">Les vidéos que tu as montées avec ton texte. Chaque variante 2 garde la vidéo et ne change que le texte.</p>
       <div class="src-list">${exRows}</div>
       <button class="addzone" data-pick="ex" type="button"><b>＋ Ajouter tes variantes 1</b><span>Autant que tu veux. Le texte est repéré automatiquement en quelques secondes, sans clé.</span></button>
     </div>`;
@@ -1150,7 +1150,8 @@ const fontCss = (f, px) => `${f.w} ${Math.max(1, px).toFixed(1)}px "${f.n}"`;
   const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?" + fam + "&display=swap"; document.head.appendChild(l);
 })();
 const fontReady = {};
-function loadFont(n) { const f = fontOf(n); if (!f) return Promise.resolve(); return fontReady[n] || (fontReady[n] = document.fonts.load(fontCss(f, 64), "AaBb12").catch(() => { }).then(() => { dirty = true; })); }
+const fontLoaded = {};
+function loadFont(n) { const f = fontOf(n); if (!f) return Promise.resolve(); return fontReady[n] || (fontReady[n] = document.fonts.load(fontCss(f, 64), "AaBb12").catch(() => { }).then(() => { fontLoaded[n] = true; dirty = true; S.variants.filter(v => v.font === n).forEach(drawThumb); })); }
 
 /* lecture des mots (Tesseract, hébergé sur le site) */
 let ocrWorker = null;
@@ -1206,8 +1207,24 @@ async function prepCaption(ex, c, vid) {
   // on ne garde que l'intérieur du cadre du texte (+ marge du contour)
   const bx0 = Math.round(c.box[0] * W) - x0 - r, by0 = Math.round(c.box[1] * H) - y0 - r, bx1 = Math.round(c.box[2] * W) - x0 + r, by1 = Math.round(c.box[3] * H) - y0 + r;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < bx0 || x > bx1 || y < by0 || y > by1) { T[y * w + x] = 0; fill[y * w + x] = 0; }
+  // cadre exact des lettres (contour compris) pour chaque ligne
+  c.tight = (c.lines && c.lines.length ? c.lines : [c.box]).map(lb => {
+    const ax = Math.max(0, Math.floor(lb[0] * W) - x0 - r), ay = Math.max(0, Math.floor(lb[1] * H) - y0), bx = Math.min(w - 1, Math.ceil(lb[2] * W) - x0 + r), by = Math.min(h - 1, Math.ceil(lb[3] * H) - y0);
+    // lignes de pixels : on garde la plus grande bande continue (ignore le bas d'une ligne voisine)
+    const rowN = []; for (let y = ay; y <= by; y++) { let n = 0; for (let x = ax; x <= bx; x++) n += T[y * w + x]; rowN.push(n); }
+    const thr = Math.max(3, (bx - ax) * 0.01); let best = null, cur = null, gap = 0;
+    rowN.forEach((n, k) => { if (n > thr) { if (!cur) cur = [k, k]; cur[1] = k; gap = 0; } else if (cur && ++gap > 2) { if (!best || cur[1] - cur[0] > best[1] - best[0]) best = cur; cur = null; gap = 0; } });
+    if (cur && (!best || cur[1] - cur[0] > best[1] - best[0])) best = cur;
+    if (!best) return lb;
+    const ty0 = ay + best[0], ty1 = ay + best[1];
+    // colonnes : on retire les pixels isolés aux deux bouts (0,5 % des pixels de chaque côté)
+    const colN = new Int32Array(bx - ax + 1); let tot = 0; for (let y = ty0; y <= ty1; y++) for (let x = ax; x <= bx; x++) if (T[y * w + x]) { colN[x - ax]++; tot++; }
+    let acc = 0, tx0 = ax, tx1 = bx; for (let k = 0; k < colN.length; k++) { acc += colN[k]; if (acc > tot * 0.005) { tx0 = ax + k; break; } }
+    acc = 0; for (let k = colN.length - 1; k >= 0; k--) { acc += colN[k]; if (acc > tot * 0.005) { tx1 = ax + k; break; } }
+    return [(tx0 + x0) / W, (ty0 + y0) / H, (tx1 + 1 + x0) / W, (ty1 + 1 + y0) / H];
+  });
   // élargit un peu (bords adoucis du texte)
-  const g = Math.max(2, Math.round(W / 400)), M = new Uint8Array(N);
+  const g = Math.max(3, Math.round(W / 220)), M = new Uint8Array(N);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (T[y * w + x]) for (let yy = Math.max(0, y - g); yy <= Math.min(h - 1, y + g); yy++) for (let xx = Math.max(0, x - g); xx <= Math.min(w - 1, x + g); xx++) M[yy * w + xx] = 1;
   let cnt = 0; for (let i = 0; i < N; i++) cnt += M[i];
   if (cnt < 30) return;
@@ -1218,10 +1235,43 @@ async function prepCaption(ex, c, vid) {
     const oc = document.createElement("canvas"); oc.width = Math.round(w * sc) + 40; oc.height = Math.round(h * sc) + 40;
     const ox = oc.getContext("2d"); ox.fillStyle = "#fff"; ox.fillRect(0, 0, oc.width, oc.height);
     const bw = document.createElement("canvas"); bw.width = w; bw.height = h; const bctx = bw.getContext("2d"); const im = bctx.createImageData(w, h);
-    for (let i = 0; i < N; i++) { const v = fill[i] ? 0 : 255; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; }
-    bctx.putImageData(im, 0, 0); ox.imageSmoothingEnabled = true; ox.drawImage(bw, 20, 20, w * sc, h * sc);
+    // lettres seulement : pixels clairs encadrés par le contour (à gauche et à droite, ou en haut et en bas)
+    const inner = new Uint8Array(N);
+    if (ls != null) {
+      const isS = i => (T[i] && !fill[i]) || (mxx[i] - L[i] >= 70 && Math.abs(L[i] - ls) < 70), lh0 = (c.box[3] - c.box[1]) * H / Math.max(1, (c.lines || [c.box]).length), dmax = Math.max(4, Math.round(lh0 * 0.14));
+      const lft = new Int32Array(N).fill(1e6), rgt = new Int32Array(N).fill(1e6), up = new Int32Array(N).fill(1e6), dn = new Int32Array(N).fill(1e6);
+      for (let y = 0; y < h; y++) { let l = -1e6; for (let x = 0; x < w; x++) { const i = y * w + x; if (isS(i)) l = x; lft[i] = x - l; } l = 1e6; for (let x = w - 1; x >= 0; x--) { const i = y * w + x; if (isS(i)) l = x; rgt[i] = l - x; } }
+      for (let x = 0; x < w; x++) { let l = -1e6; for (let y = 0; y < h; y++) { const i = y * w + x; if (isS(i)) l = y; up[i] = y - l; } l = 1e6; for (let y = h - 1; y >= 0; y--) { const i = y * w + x; if (isS(i)) l = y; dn[i] = l - y; } }
+      for (let i = 0, j = 0; i < N; i++, j += 4) {
+        const near = fill[i] || (!isS(i) && Math.min(Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]), Math.hypot(D[j] - hl[0], D[j + 1] - hl[1], D[j + 2] - hl[2])) < 70);
+        if (near && ((lft[i] <= dmax && rgt[i] <= dmax) || (up[i] <= dmax && dn[i] <= dmax))) inner[i] = 1;
+      }
+    } else inner.set(fill);
+    { // referme les petites coupures dans les lettres (fermeture morphologique, rayon 2)
+      const rr = 1, tmp = new Uint8Array(N), dil = new Uint8Array(N);
+      const pass = (src, dst, isMax) => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let v = isMax ? 0 : 1; for (let k = -rr; k <= rr && (isMax ? !v : v); k++) { const yy = y + k; if (yy < 0 || yy >= h) continue; for (let q = -rr; q <= rr; q++) { const xx = x + q; if (xx < 0 || xx >= w) continue; const s = src[yy * w + xx]; if (isMax && s) { v = 1; break; } if (!isMax && !s) { v = 0; break; } } } dst[y * w + x] = v; } };
+      pass(inner, dil, true); pass(dil, tmp, false); inner.set(tmp);
+    }
+    { // retire les petites taches (scintillement du décor) : plus petites qu'un point de ponctuation
+      const lh = (c.box[3] - c.box[1]) * H / Math.max(1, (c.lines || [c.box]).length), minA = Math.max(6, lh * lh * 0.004);
+      const lab = new Int32Array(N), st = [], comp = []; let id = 0;
+      for (let s0 = 0; s0 < N; s0++) { if (!inner[s0] || lab[s0]) continue; id++; lab[s0] = id; st.push(s0); const pts = [];
+        while (st.length) { const q = st.pop(); pts.push(q); const x = q % w; for (const nb of [x > 0 ? q - 1 : -1, x < w - 1 ? q + 1 : -1, q - w, q + w]) if (nb >= 0 && nb < N && inner[nb] && !lab[nb]) { lab[nb] = id; st.push(nb); } }
+        if (pts.length < minA) for (const q of pts) inner[q] = 0; }
+    }
+    for (let i = 0; i < N; i++) { const v = inner[i] ? 0 : 255; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; }
+    bctx.putImageData(im, 0, 0);
+    // 2e image : lettres seules par contraste (meilleure sur certaines vidéos)
+    const bw2 = document.createElement("canvas"); bw2.width = w; bw2.height = h; const b2 = bw2.getContext("2d"); const im2 = b2.createImageData(w, h);
+    for (let i = 0; i < N; i++) { const v = fill[i] ? 0 : 255; im2.data[i * 4] = im2.data[i * 4 + 1] = im2.data[i * 4 + 2] = v; im2.data[i * 4 + 3] = 255; }
+    b2.putImageData(im2, 0, 0);
+    const scaled = src => { ox.fillStyle = "#fff"; ox.fillRect(0, 0, oc.width, oc.height); ox.imageSmoothingEnabled = true; ox.drawImage(src, 20, 20, w * sc, h * sc); return oc; };
     try {
-      const wk = await getOCR(); const { data } = await wk.recognize(oc);
+      const wk = await getOCR();
+      // on lit les deux images et on garde la lecture la plus sûre (confiance moyenne des mots)
+      const score = d => { const ws = (d.words || []).filter(x => x.text && x.text.trim()); return ws.length ? ws.reduce((a, x) => a + x.confidence, 0) / ws.length : 0; };
+      const r1 = (await wk.recognize(scaled(bw))).data, r2 = (await wk.recognize(scaled(bw2))).data;
+      const data = score(r2) > score(r1) + 3 ? r2 : r1;
       const lines = (data.lines || []).map(l => (l.words || []).filter(wd => wd.text && wd.text.trim() && wd.confidence > 20).map(wd => {
         // mot en couleur ? on compare la couleur des lettres sous le mot
         const ax = Math.max(0, Math.floor((wd.bbox.x0 - 20) / sc)), ay = Math.max(0, Math.floor((wd.bbox.y0 - 20) / sc)), bx = Math.min(w, Math.ceil((wd.bbox.x1 - 20) / sc)), by = Math.min(h, Math.ceil((wd.bbox.y1 - 20) / sc));
@@ -1281,29 +1331,43 @@ function planFor(c, W, H) {
   }
   return (c.plans[k] = { x, y, w, h, idx: Int32Array.from(idx), nb, wt });
 }
+let _ec = null;
 function erase(ctx, c, W, H) {
   const p = planFor(c, W, H); if (!p.idx.length) return;
-  const im = ctx.getImageData(p.x, p.y, p.w, p.h), d = im.data, src = new Uint8ClampedArray(d);
+  // on ne lit que la petite zone du texte (rapide), l'image entière reste sur la carte graphique
+  if (!_ec) { const cv = document.createElement("canvas"); _ec = { cv, x: cv.getContext("2d", { willReadFrequently: true }) }; }
+  if (_ec.cv.width < p.w || _ec.cv.height < p.h) { _ec.cv.width = Math.max(_ec.cv.width, p.w); _ec.cv.height = Math.max(_ec.cv.height, p.h); }
+  const ex2 = _ec.x; ex2.clearRect(0, 0, p.w, p.h); ex2.drawImage(ctx.canvas, p.x, p.y, p.w, p.h, 0, 0, p.w, p.h);
+  const im = ex2.getImageData(0, 0, p.w, p.h), d = im.data, src = new Uint8ClampedArray(d);
   for (let k = 0; k < p.idx.length; k++) {
     const o = p.idx[k] * 4, b = k * 4; let r = 0, g = 0, bl = 0;
     for (let q = 0; q < 4; q++) { const ww = p.wt[b + q]; if (!ww) continue; const s = p.nb[b + q] * 4; r += src[s] * ww; g += src[s + 1] * ww; bl += src[s + 2] * ww; }
     d[o] = r; d[o + 1] = g; d[o + 2] = bl;
   }
-  ctx.putImageData(im, p.x, p.y);
+  // adoucit la zone effacée (évite le quadrillage) : 2 passes de moyenne sur les pixels effacés seulement
+  const w = p.w, h = p.h;
+  for (let pass = 0; pass < 2; pass++) for (let k = 0; k < p.idx.length; k++) {
+    const i = p.idx[k], x = i % w, y = (i - x) / w; if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) continue;
+    const o = i * 4, a = o - 4, b = o + 4, u = o - w * 4, dn = o + w * 4;
+    for (let ch = 0; ch < 3; ch++) d[o + ch] = (d[o + ch] * 2 + d[a + ch] + d[b + ch] + d[u + ch] + d[dn + ch]) / 6;
+  }
+  ex2.putImageData(im, 0, 0); ctx.drawImage(_ec.cv, 0, 0, p.w, p.h, p.x, p.y, p.w, p.h);
 }
 /* réécrit le texte : mêmes lignes, même place, même hauteur que l'original */
-function drawText(ctx, c, v, W, H) {
+function drawText(ctx, c, v, W, H, forced) {
   const f = fontOf(v.font); if (!f || !c.tl || !c.tl.length) return;
   const col = colorsFor(v, c), per = (v.per && v.per[c.id]) || {};
-  const lines = c.tl, lb = (c.lines && c.lines.length === lines.length) ? c.lines : null;
-  const bx = c.box.map((q, i) => q * (i % 2 ? H : W));
+  const lines = c.tl, src = c.tight || c.lines, lb = (src && src.length === lines.length) ? src : null;
+  const tb = c.tight && c.tight.length ? [Math.min(...c.tight.map(q => q[0])), Math.min(...c.tight.map(q => q[1])), Math.max(...c.tight.map(q => q[2])), Math.max(...c.tight.map(q => q[3]))] : c.box;
+  const bx = tb.map((q, i) => q * (i % 2 ? H : W));
   const n = lines.length, slotH = (bx[3] - bx[1]) / n;
   const boxes = lb ? lb.map(b => b.map((q, i) => q * (i % 2 ? H : W))) : lines.map((_, i) => [bx[0], bx[1] + i * slotH, bx[2], bx[1] + (i + 1) * slotH]);
   const hasStroke = !!c.stroke && v.strokeOn !== false;
   const strokeCol = per.stroke || v.stroke || strokeOf(c);
   // alignement : bords gauches alignés → à gauche ; droits → à droite ; sinon centré
   const tolA = W * 0.015, lefts = boxes.map(b => b[0]), rights = boxes.map(b => b[2]);
-  const align = n > 1 && Math.max(...lefts) - Math.min(...lefts) < tolA && Math.max(...rights) - Math.min(...rights) > tolA * 2 ? "left" : n > 1 && Math.max(...rights) - Math.min(...rights) < tolA && Math.max(...lefts) - Math.min(...lefts) > tolA * 2 ? "right" : "center";
+  let align = n > 1 && Math.max(...lefts) - Math.min(...lefts) < tolA && Math.max(...rights) - Math.min(...rights) > tolA * 2 ? "left" : n > 1 && Math.max(...rights) - Math.min(...rights) < tolA && Math.max(...lefts) - Math.min(...lefts) > tolA * 2 ? "right" : "center";
+  if (n === 1 && c.alignHint) align = c.alignHint;
   const probe = 100; ctx.font = fontCss(f, probe);
   const sw = hasStroke ? 0.14 : 0; // épaisseur du contour (proportion de la taille)
   let size = Infinity;
@@ -1311,9 +1375,11 @@ function drawText(ctx, c, v, W, H) {
     const s = ln.map(x => x.t).join(" "), m = ctx.measureText(s), b = boxes[i];
     const hh = (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / probe + sw, ww = m.width / probe + sw;
     const capM = ctx.measureText("H"); const capH = capM.actualBoundingBoxAscent / probe + sw;
-    const byH = (b[3] - b[1]) / Math.max(hh, capH * 1.02), byW = Math.max(b[2] - b[0], W * 0.2) * 1.12 / ww;
+    const byH = (b[3] - b[1]) / Math.max(hh, capH * 1.02), byW = (b[2] - b[0]) * 1.04 / ww;
     size = Math.min(size, byH, byW, (W * 0.94) / ww);
   });
+  if (forced === "measure") return size;
+  if (forced) size = Math.min(size, forced);
   size *= (v.size || 1); if (!isFinite(size) || size < 4) return;
   ctx.font = fontCss(f, size); ctx.textBaseline = "alphabetic"; ctx.lineJoin = "round"; ctx.miterLimit = 2;
   lines.forEach((ln, i) => {
@@ -1327,13 +1393,31 @@ function drawText(ctx, c, v, W, H) {
   });
 }
 function fontActive(v, c) { return !!(v && v.font && fontOf(v.font) && c.mk && c.tl && c.tl.length); }
+/* même taille pour les lignes qui avaient la même hauteur dans l'original (ex. une liste 1. 2. 3.) */
+function harmonized(ctx, ex, v, W, H) {
+  const caps = ex.result.captions.filter(c => fontActive(v, c));
+  const key = [v.font, !!fontLoaded[v.font], W, H, ...caps.map(c => c.id + ":" + c.text + ":" + (c.tight || []).join(","))].join("|");
+  if (v._hz && v._hz.key === key) return v._hz.sz;
+  const lineH = c => { const b = c.tight || c.lines || [c.box]; return b.reduce((a, q) => a + (q[3] - q[1]), 0) / b.length * H; };
+  // alignement d'un texte d'une ligne : même bord gauche (ou droit) qu'un autre texte → aligné de ce côté
+  const tbOf = c => { const b = c.tight || [c.box]; return [Math.min(...b.map(q => q[0])), Math.max(...b.map(q => q[2]))]; };
+  caps.forEach(c => { const [l, r] = tbOf(c); const others = ex.result.captions.filter(o => o !== c).map(tbOf);
+    const sameL = others.some(o => Math.abs(o[0] - l) < 0.015), sameR = others.some(o => Math.abs(o[1] - r) < 0.015), mid = Math.abs((l + r) / 2 - 0.5) < 0.03;
+    c.alignHint = sameL && !sameR ? "left" : sameR && !sameL ? "right" : mid ? "center" : sameL ? "left" : "center"; });
+  const raw = {}; caps.forEach(c => { ctx.save(); raw[c.id] = drawText(ctx, c, v, W, H, "measure"); ctx.restore(); });
+  const sz = {};
+  caps.forEach(c => { const peers = caps.filter(o => Math.abs(lineH(o) - lineH(c)) <= lineH(c) * 0.18 && isFinite(raw[o.id])); sz[c.id] = Math.min(...peers.map(o => raw[o.id]), raw[c.id]); });
+  v._hz = { key, sz }; return sz;
+}
 /* dessine une image complète d'une variante dans un canvas 2D (vidéo + textes réécrits) */
 function composeFont(ctx, src, W, H, ex, v, t) {
   ctx.drawImage(src, 0, 0, W, H);
-  for (const c of ex.result.captions) {
-    if (t < c.start - 0.01 || t > c.end + 0.01 || !fontActive(v, c)) continue;
-    erase(ctx, c, W, H); drawText(ctx, c, v, W, H);
-  }
+  const on = ex.result.captions.filter(c => t >= c.start - 0.01 && t <= c.end + 0.01 && fontActive(v, c));
+  if (!on.length) return;
+  const sz = harmonized(ctx, ex, v, W, H);
+  for (const c of on) erase(ctx, c, W, H);                  // d'abord on efface tous les textes affichés…
+  for (const c of on) drawText(ctx, c, v, W, H, sz[c.id]); // …puis on les réécrit
+
 }
 /* textes encore à recolorer à l'ancienne (police non disponible pour eux) */
 const recolorOnly = (ex, v) => v && v.font ? ex.result.captions.filter(c => !fontActive(v, c)) : null;
@@ -1421,7 +1505,7 @@ const thumbCanvas = $("#thumbGL"); let RT = null; try { RT = makeRenderer(thumbC
 function drawThumb(v) {
   const cv = document.querySelector(`.vcard[data-id="${v.id}"] canvas`); const ex = exById(v.exId); if (!cv || !ex || !ex.still || !RT) return;
   thumbCanvas.width = ex.still.width; thumbCanvas.height = ex.still.height;
-  if (v.font) { loadFont(v.font).then(() => { if (!v._th) { v._th = 1; drawThumb(v); v._th = 0; } }); const tc = document.createElement("canvas"); tc.width = ex.still.width; tc.height = ex.still.height; const tx = tc.getContext("2d", { willReadFrequently: true }); composeFont(tx, ex.still, tc.width, tc.height, ex, v, ex.stillT); RT.draw(tc, recolorItems(ex, v, ex.stillT)); }
+  if (v.font) { if (!fontLoaded[v.font]) loadFont(v.font); const tc = document.createElement("canvas"); tc.width = ex.still.width; tc.height = ex.still.height; const tx = tc.getContext("2d"); composeFont(tx, ex.still, tc.width, tc.height, ex, v, ex.stillT); RT.draw(tc, recolorItems(ex, v, ex.stillT)); }
   else RT.draw(ex.still, recolorItems(ex, v, ex.stillT));
   cv.width = ex.still.width; cv.height = ex.still.height; cv.getContext("2d").drawImage(thumbCanvas, 0, 0);
 }
@@ -1495,13 +1579,15 @@ async function renderVideo(v, onProg, slot = 0) {
   const W = vid.videoWidth, H = vid.videoHeight, srcDur = vid.duration;
   const { cv, r, release } = exportRenderer(W, H);
   let cc = null;
-  if (v.font) { await prepEx(ex); await loadFont(v.font); const c2 = document.createElement("canvas"); c2.width = W; c2.height = H; cc = { cv: c2, ctx: c2.getContext("2d", { willReadFrequently: true }) }; }
-  const draw = t => { if (cc) { composeFont(cc.ctx, vid, W, H, ex, v, t); r.draw(cc.cv, recolorItems(ex, v, t)); } else r.draw(vid, recolorItems(ex, v, t)); };
+  if (v.font) { await prepEx(ex); await loadFont(v.font); const c2 = document.createElement("canvas"); c2.width = W; c2.height = H; cc = { cv: c2, ctx: c2.getContext("2d", { alpha: false }) }; }
+  // tous les textes réécrits → on enregistre directement le canvas 2D (pas de passage WebGL à chaque image)
+  const pure2D = !!cc && ex.result.captions.every(c => fontActive(v, c));
+  const draw = t => { if (cc) { composeFont(cc.ctx, vid, W, H, ex, v, t); if (!pure2D) r.draw(cc.cv, recolorItems(ex, v, t)); } else r.draw(vid, recolorItems(ex, v, t)); };
   draw(0);
   // « Comme la source » : une image enregistrée pour chaque image de la vidéo d'origine (même cadence).
   const fpsSel = $("#selFps").value;
   // 60 = plafond : une image est capturée à chaque nouvelle image dessinée, donc la cadence de la source (jusqu’à 60 i/s).
-  const stream = cv.captureStream(fpsSel === "auto" ? 60 : (+fpsSel || 30));
+  const stream = (pure2D ? cc.cv : cv).captureStream(fpsSel === "auto" ? 60 : (+fpsSel || 30));
   let node = null, noAudio = false;
   try { node = A.createMediaElementSource(vid); const dest = A.createMediaStreamDestination(); node.connect(dest); dest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr)); } catch (e) { noAudio = true; }
   const rec = new MediaRecorder(stream, { mimeType: MIME, videoBitsPerSecond: Math.round(bitrateFor(ex)), audioBitsPerSecond: 320000 });
@@ -2104,7 +2190,7 @@ if (!window.VX_CFG.clientId || !window.VX_CFG.apiKey) setTimeout(openSettings, 4
   }
   sampleReady = true; renderDrops(); runQueue();
 })();
-window.__vx = { S, select, seek, get dirty() { return dirty; } }; // accès de diagnostic
+window.__vx = { S, select, seek, renderVideo, get dirty() { return dirty; } }; // accès de diagnostic
 })();
 </script>
 </body>
