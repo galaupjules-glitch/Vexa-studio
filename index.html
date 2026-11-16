@@ -340,7 +340,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-15 e (projet automatique)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-16 a</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -822,12 +822,6 @@ function renderDrops() {
       <div class="src-acts"><button class="icon-btn" data-ex="rm" type="button" aria-label="Retirer" title="Retirer">✕</button></div>
     </div>`).join("");
   $("#drops").innerHTML = `
-    <div class="dsec" data-slot="orig">
-      <div class="dsec-h"><h3>Vidéos originales <span class="tag">Référence</span></h3><span class="meta">${S.clips.length || ""}</span></div>
-      <p class="hint" style="margin:0">Le décor sans texte. Le Studio s’en sert pour bien distinguer ton texte de la scène. Elles ne sont pas réexportées.</p>
-      <div class="src-list">${clipRows}</div>
-      <button class="addzone" data-pick="orig" type="button"><b>＋ Ajouter des vidéos originales</b><span>Autant que tu veux.</span></button>
-    </div>
     <div class="dsec" data-slot="ex">
       <div class="dsec-h"><h3>Variantes 1 <span class="tag y">Tes montages</span></h3><span class="meta">${S.examples.length || ""}</span></div>
       <p class="hint" style="margin:0">Les vidéos que tu as montées avec ton texte. Chaque variante 2 est une copie de l’une d’elles avec une autre couleur de texte.</p>
@@ -856,9 +850,9 @@ $("#drops").addEventListener("click", e => {
   }
 });
 $("#fileAny").onchange = e => { const fs = [...e.target.files]; if (fs.length) takeFiles(pickSlot, fs); };
-$("#drops").addEventListener("dragover", e => { const d = e.target.closest("[data-slot]"); if (!d) return; e.preventDefault(); d.classList.add("over"); });
+$("#drops").addEventListener("dragover", e => { const d = e.target.closest("[data-slot]") || document.querySelector('[data-slot="ex"]'); if (!d) return; e.preventDefault(); d.classList.add("over"); });
 $("#drops").addEventListener("dragleave", e => { const d = e.target.closest("[data-slot]"); if (d && !d.contains(e.relatedTarget)) d.classList.remove("over"); });
-$("#drops").addEventListener("drop", e => { const d = e.target.closest("[data-slot]"); if (!d) return; e.preventDefault(); d.classList.remove("over"); const fs = [...e.dataTransfer.files]; if (fs.length) takeFiles(d.dataset.slot, fs); });
+$("#drops").addEventListener("drop", e => { const d = e.target.closest("[data-slot]") || document.querySelector('[data-slot="ex"]'); if (!d) return; e.preventDefault(); d.classList.remove("over"); const fs = [...e.dataTransfer.files]; if (fs.length) takeFiles(d.dataset.slot, fs); });
 const isVideo = f => (f.type || "").startsWith("video/") || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
 async function loadMeta(file) {
   const url = URL.createObjectURL(file);
@@ -878,7 +872,7 @@ async function takeFiles(slot, files) {
   for (const f of vids) {
     try {
       const d = await loadMeta(f);
-      if (slot === "orig") { S.clips.push({ id: uid(), ...d }); continue; }
+      
       const missing = S.examples.find(x => !x.url && x.name === d.name && x.size === d.size);
       if (missing) { Object.assign(missing, d); missing.status = missing.result ? "done" : "queued"; missing.el = makeEl(missing); captureStill(missing); continue; }
       const ex = { id: uid(), ...d, status: "queued", tol: 0.22 }; ex.el = makeEl(ex); S.examples.push(ex);
