@@ -284,11 +284,17 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
             <input type="number" id="genCount" min="1" max="60" value="10">
             <button class="btn primary" id="btnGen" type="button">Générer 10 variantes au total</button>
           </div>
-          <p class="hint" style="margin:0">Le total est réparti entre toutes tes variantes 1. Chaque variante 2 est ta variante 1 à l’identique (montage, son, texte, police, place) avec une autre couleur de texte. À chaque clic, les variantes non retouchées sont remplacées.</p>
+          <p class="hint" style="margin:0">Le total est réparti entre toutes tes variantes 1. Chaque variante 2 garde ta vidéo à l’identique (montage, son, fond, place du texte) : seul le texte change, avec une autre couleur et, si tu le coches, une autre police. À chaque clic, les variantes non retouchées sont remplacées.</p>
           <label class="chk opt-auto"><input type="checkbox" id="optAuto" checked> Créer les variantes 2 automatiquement dès que Claude a lu tes variantes 1</label>
           <div>
             <div class="eyebrow" style="margin-bottom:6px">Couleurs utilisées</div>
             <div class="palette" id="palette"></div>
+            <div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="hint" style="margin:0">Ta couleur :</span><input type="color" id="customCol" value="#FF3366" aria-label="Choisir une couleur"><button class="btn sm" id="addCol" type="button">+ Ajouter</button></div>
+          </div>
+          <label class="chk"><input type="checkbox" id="optFont" checked> Changer aussi la police (seul le texte change, pas la vidéo)</label>
+          <div id="fontBox">
+            <div class="eyebrow" style="margin-bottom:6px">Polices utilisées <span class="hint" style="text-transform:none;letter-spacing:0">(clique pour activer / retirer)</span></div>
+            <div class="palette" id="fontPal"></div>
           </div>
         </div>
       </section>
@@ -340,7 +346,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-16 a</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-16 b (polices)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -496,7 +502,7 @@ const PAL = [
 const HL_ALT = ["#FFFFFF", "#FFE14D", "#111111"];
 
 /* ---------- state ---------- */
-const S = { clips: [], examples: [], variants: [], selected: null, selCap: null, settings: { count: 10, auto: true, off: [] }, counter: 1 };
+const S = { clips: [], examples: [], variants: [], selected: null, selCap: null, settings: { count: 10, auto: true, off: [], custom: [], fontOn: true, fontsOff: [] }, counter: 1 };
 const LS = "studio-variantes-v3";
 try { const o = JSON.parse(localStorage.getItem(LS) || "null"); if (o && o.settings) Object.assign(S.settings, o.settings); } catch (e) { }
 const saveSettings = () => { try { localStorage.setItem(LS, JSON.stringify({ settings: S.settings })); } catch (e) { } };
@@ -560,6 +566,7 @@ function recolorItems(ex, v, t, test) {
   const out = [];
   for (const c of ex.result.captions) {
     if (t < c.start - PAD_T || t > c.end + PAD_T) continue;
+    if (v && typeof fontActive === "function" && fontActive(v, c)) continue;
     const col = v ? colorsFor(v, c) : { fill: "#FF2BD6", hl: "#2BFFF0" };
     const m = 0.008 + (Math.abs(c.rot || 0) > 1 ? 0.02 : 0);
     const lineH = Math.min(c.box[3] - c.box[1], 0.045);
@@ -584,6 +591,8 @@ function exportRenderer(W, H) {
   return { cv, r, release };
 }
 let dirty = true, playing = false;
+let _cc = null;
+function compCanvas(W, H) { if (!_cc) { const cv = document.createElement("canvas"); _cc = { cv, ctx: cv.getContext("2d", { willReadFrequently: true }) }; } if (_cc.cv.width !== W || _cc.cv.height !== H) { _cc.cv.width = W; _cc.cv.height = H; } return _cc; }
 const curEx = () => exOf(current());
 const curEl = () => { const ex = curEx(); return ex && ex.el; };
 function setStageSize() {
@@ -600,7 +609,8 @@ function renderStage() {
   if (!R && stage.getContext("webgl") && !stage.getContext("webgl").isContextLost()) { try { R = makeRenderer(stage); } catch (e) { R = null; } }
   if (v.readyState >= 2 && R) {
     const showOrig = isVariant(it) && $("#optCompare").checked;
-    R.draw(v, showOrig ? [] : recolorItems(ex, isVariant(it) ? it : null, t, !isVariant(it) && ex.test));
+    if (!showOrig && isVariant(it) && it.font) { loadFont(it.font); const cc = compCanvas(ex.w || v.videoWidth, ex.h || v.videoHeight); composeFont(cc.ctx, v, cc.cv.width, cc.cv.height, ex, it, t); R.draw(cc.cv, recolorItems(ex, it, t)); }
+    else R.draw(v, showOrig ? [] : recolorItems(ex, isVariant(it) ? it : null, t, !isVariant(it) && ex.test));
   }
   const showBoxes = !isVariant(it) || $("#optBoxes").checked;
   overlay.style.opacity = showBoxes ? "1" : "0";
@@ -706,7 +716,7 @@ function renderEditor() {
       <div class="row" style="justify-content:space-between"><span class="hint">${caps.length} texte${caps.length > 1 ? "s" : ""} repéré${caps.length > 1 ? "s" : ""}</span><button class="btn sm" id="btnAddZone" type="button">+ Zone de texte au temps actuel</button></div>
       <div class="caps">${caps.map((c, i) => `
         <div class="cap ${S.selCap === c.id ? "sel" : ""}" data-id="${c.id}">
-          <input type="text" class="cap-text" id="t-${c.id}" data-f="text" value="${esc(c.text)}" aria-label="Texte ${i + 1}">
+          <textarea class="cap-text" id="t-${c.id}" data-f="text" rows="${Math.max(1, String(c.text).split("\n").length)}" aria-label="Texte ${i + 1}" placeholder="Écris le texte exact (une ligne par ligne de la vidéo)">${esc(c.text)}</textarea>
           <div class="cap-line">
             <span class="cap-n">#${i + 1}</span>
             <span class="time"><span class="lbl">de</span><input id="s-${c.id}" data-f="start" type="number" step="0.05" min="0" value="${(+c.start).toFixed(2)}"><button class="icon-btn" data-act="setStart" type="button" title="Début = temps actuel" aria-label="Début au temps actuel">⏱</button></span>
@@ -723,16 +733,21 @@ function renderEditor() {
   } else {
     const v = it;
     ed.innerHTML = `
-      <div class="note">Variante 2 de <b>${esc(v.srcName)}</b> : la vidéo est identique, seule la couleur du texte change. Coche « Comparer avec la variante 1 » pour voir l’original.</div>
+      <div class="note">Variante 2 de <b>${esc(v.srcName)}</b> : la vidéo de fond est identique, seul le texte change (police, couleur). Coche « Comparer avec la variante 1 » pour voir l’original.${v.font && exOf(v) && !exOf(v).prepDone ? " <b>Lecture des mots en cours…</b>" : ""}</div>
       <div class="style-grid">
+        <label class="mini">Police <select id="vFont"><option value="">Police d’origine (couleur seulement)</option>${FONTS.map(f => `<option value="${esc(f.n)}" ${v.font === f.n ? "selected" : ""} style="font-family:'${f.n}'">${esc(f.n)}</option>`).join("")}</select></label>
+        <button class="btn sm" id="vNextFont" type="button">↻ Autre police</button>
         <label class="mini">Couleur du texte <input type="color" id="vFill" value="${v.fill}"></label>
         <label class="mini">Mot surligné <input type="color" id="vHl" value="${v.hl}"></label>
         <button class="btn sm" id="vNext" type="button">↻ Autre couleur</button>
+        ${v.font ? `<label class="mini">Contour <input type="color" id="vStroke" value="${v.stroke || "#000000"}"></label>
+        <label class="chk"><input type="checkbox" id="vStrokeOn" ${v.strokeOn !== false ? "checked" : ""}> Contour</label>
+        <label class="fld"><span>Taille · ${Math.round((v.size || 1) * 100)} %</span><input type="range" id="vSize" min="0.7" max="1.3" step="0.02" value="${v.size || 1}"></label>` : ""}
       </div>
       <span class="hint">Couleur par texte (laisse tel quel pour suivre la couleur de la variante) :</span>
       <div class="caps">${caps.map((c, i) => { const col = colorsFor(v, c); return `
         <div class="cap" data-id="${c.id}">
-          <div class="cap-line"><span class="cap-n">#${i + 1}</span><span class="cap-label">${esc(c.text)}</span></div>
+          <div class="cap-line"><span class="cap-n">#${i + 1}</span>${v.font ? `<textarea class="cap-text" data-f="text" rows="${Math.max(1, String(c.text).split("\n").length)}" aria-label="Texte ${i + 1}" placeholder="Écris le texte exact">${esc(c.text)}</textarea>` : `<span class="cap-label">${esc(c.text)}</span>`}</div>
           <div class="cap-line">
             <span class="mini">Texte <input type="color" data-vf="fill" value="${col.fill}"></span>
             ${hasHl(c) ? `<span class="mini">Mot surligné <input type="color" data-vf="hl" value="${col.hl}"></span>` : ""}
@@ -754,19 +769,25 @@ $("#editor").addEventListener("input", e => {
   const t = e.target;
   if (t.id === "exTol") { ex.tol = +t.value; t.previousElementSibling.textContent = "Sensibilité · " + Math.round(ex.tol * 100); exChanged(ex); return; }
   if (t.id === "exTest") { ex.test = t.checked; dirty = true; return; }
-  if (t.id === "vFill" || t.id === "vHl") { it[t.id === "vFill" ? "fill" : "hl"] = t.value.toUpperCase(); variantChanged(it); return; }
+  if (t.id === "vFill" || t.id === "vHl") { it[t.id === "vFill" ? "fill" : "hl"] = t.value.toUpperCase(); it.colName = "Personnalisée"; variantChanged(it); return; }
+  if (t.id === "vStroke") { it.stroke = t.value.toUpperCase(); variantChanged(it); return; }
+  if (t.id === "vStrokeOn") { it.strokeOn = t.checked; variantChanged(it); return; }
+  if (t.id === "vSize") { it.size = +t.value; t.previousElementSibling.textContent = "Taille · " + Math.round(it.size * 100) + " %"; variantChanged(it); return; }
+  if (t.id === "vFont") { it.font = t.value || null; if (it.font) { loadFont(it.font); prepEx(ex); } variantChanged(it); updateChips(it); renderEditor(); return; }
   const row = t.closest(".cap"); if (!row) return;
   const c = ex.result.captions.find(x => x.id === row.dataset.id); if (!c) return;
   if (t.dataset.vf) { it.per = it.per || {}; it.per[c.id] = Object.assign({}, it.per[c.id], { [t.dataset.vf]: t.value.toUpperCase() }); variantChanged(it); return; }
   const f = t.dataset.f; if (!f) return;
   c[f] = ["start", "end"].includes(f) ? (+t.value || 0) : f === "text" ? t.value : t.value.toUpperCase();
+  if (f === "text") { c.tl = textLines(t.value, c.tl); exChanged(ex, true); return; }
   exChanged(ex);
 });
-$("#editor").addEventListener("change", e => { if (e.target.id === "exTest") return; if (["start", "end"].includes(e.target.dataset.f)) renderEditor(); });
+$("#editor").addEventListener("change", e => { if (["exTest", "vFont", "vStrokeOn"].includes(e.target.id)) return; if (["start", "end"].includes(e.target.dataset.f)) renderEditor(); });
 $("#editor").addEventListener("focusin", e => { const row = e.target.closest(".cap"); if (row && S.selCap !== row.dataset.id) { S.selCap = row.dataset.id; renderSelRows(); dirty = true; } });
 $("#editor").addEventListener("click", e => {
   const it = current(), ex = exOf(it); if (!ex || !ex.result) return;
   if (e.target.id === "vNext") { nextColor(it); renderEditor(); return; }
+  if (e.target.id === "vNextFont") { nextFont(it); renderEditor(); return; }
   if (e.target.id === "btnAddZone") {
     const t = ex.el ? +ex.el.currentTime.toFixed(2) : 0;
     const c = { id: uid(), text: "Nouveau texte", start: t, end: Math.min(ex.dur, t + 2), box: [0.2, 0.3, 0.8, 0.36], color: "#FFFFFF", hl: "#FFFFFF", stroke: "#000000", rot: 0 };
@@ -784,8 +805,9 @@ $("#editor").addEventListener("click", e => {
   exChanged(ex); renderEditor();
 });
 let thumbT;
-function exChanged(ex) {
+function exChanged(ex, geomUnchanged) {
   dirty = true;
+  if (!geomUnchanged && ex.result && ex.url && ex.result.captions.some(c => c.mk && c.sig !== sigOf(c) || !c.mk)) schedulePrep(ex);
   S.variants.filter(v => v.exId === ex.id).forEach(v => { v.blob = null; setStatus(v, ""); setProg(v, 0); });
   clearTimeout(thumbT); thumbT = setTimeout(() => S.variants.filter(v => v.exId === ex.id).forEach(drawThumb), 200);
 }
@@ -799,7 +821,7 @@ function exStatusText(ex) {
     missing: "Redépose cette vidéo pour la retrouver (projet ouvert).",
     queued: "En attente de lecture…",
     reading: ex.msg || "Repérage du texte…",
-    done: ex.result ? `✓ ${ex.result.captions.length} texte${ex.result.captions.length > 1 ? "s" : ""} repéré${ex.result.captions.length > 1 ? "s" : ""} · ${S.variants.filter(v => v.exId === ex.id).length} variante(s) 2` : "",
+    done: ex.result ? `✓ ${ex.result.captions.length} texte${ex.result.captions.length > 1 ? "s" : ""} repéré${ex.result.captions.length > 1 ? "s" : ""} · ${S.variants.filter(v => v.exId === ex.id).length} variante(s) 2${ex.prepBusy && ex.prepMsg ? " · " + ex.prepMsg : ""}` : "",
     error: ex.msg || "La lecture a échoué.",
     manual: "Lecture automatique indisponible : colle ta clé Gemini (AI Studio) dans ⚙ Réglages → « Clé Gemini »."
   })[ex.status] || "";
@@ -874,7 +896,7 @@ async function takeFiles(slot, files) {
       const d = await loadMeta(f);
       
       const missing = S.examples.find(x => !x.url && x.name === d.name && x.size === d.size);
-      if (missing) { Object.assign(missing, d); missing.status = missing.result ? "done" : "queued"; missing.el = makeEl(missing); captureStill(missing); continue; }
+      if (missing) { Object.assign(missing, d); missing.status = missing.result ? "done" : "queued"; missing.el = makeEl(missing); captureStill(missing); if (missing.result) prepEx(missing); continue; }
       const ex = { id: uid(), ...d, status: "queued", tol: 0.22 }; ex.el = makeEl(ex); S.examples.push(ex);
       if (!current()) S.selected = ex.id;
     } catch (err) { toast("Impossible de lire " + f.name + "."); }
@@ -894,6 +916,7 @@ async function runQueue() {
     ex.result = await readCaptions(ex);
     ex.status = "done";
     await captureStill(ex);
+    prepEx(ex).catch(e => console.warn(e));
   } catch (err) {
     const code = err && err.code;
     ex.status = "error";
@@ -995,8 +1018,8 @@ async function localDetect(url, D, onMsg) {
     const g = groups.find(G => Math.abs(G.first - l.first) <= 1 && Math.abs(G.last - l.last) <= 1 && (
       (l.box[1] - G.box[3] < lh * 0.9 && Math.min(G.box[2], l.box[2]) > Math.max(G.box[0], l.box[0])) ||                 // ligne suivante du même bloc
       (Math.min(G.box[3], l.box[3]) - Math.max(G.box[1], l.box[1]) > lh * 0.5 && Math.max(G.box[0], l.box[0]) - Math.min(G.box[2], l.box[2]) < lh * 1.2))); // mot voisin sur la même ligne
-    if (g) { g.box = [Math.min(g.box[0], l.box[0]), Math.min(g.box[1], l.box[1]), Math.max(g.box[2], l.box[2]), Math.max(g.box[3], l.box[3])]; g.first = Math.min(g.first, l.first); g.last = Math.max(g.last, l.last); }
-    else groups.push({ ...l, box: [...l.box] });
+    if (g) { g.lines.push(l.box); g.box = [Math.min(g.box[0], l.box[0]), Math.min(g.box[1], l.box[1]), Math.max(g.box[2], l.box[2]), Math.max(g.box[3], l.box[3])]; g.first = Math.min(g.first, l.first); g.last = Math.max(g.last, l.last); }
+    else groups.push({ ...l, box: [...l.box], lines: [l.box] });
   }
   // 5) couleurs (lettres, mot en couleur, contour) + signature pour affiner début/fin
   const hexOf = a => "#" + a.map(x => Math.round(x).toString(16).padStart(2, "0")).join("").toUpperCase();
@@ -1027,7 +1050,8 @@ async function localDetect(url, D, onMsg) {
     caps.push({
       text: "", start: +start.toFixed(2), end: +end.toFixed(2),
       box: [Math.max(0, x0 - pad) / W, Math.max(0, y0 - pad) / H, Math.min(W, x1 + 1 + pad) / W, Math.min(H, y1 + 1 + pad) / H],
-      color: hexOf(main), highlight: hexOf(hl), stroke: stroke ? hexOf(stroke) : null, rotation: 0
+      color: hexOf(main), highlight: hexOf(hl), stroke: stroke ? hexOf(stroke) : null, rotation: 0,
+      lines: g.lines.sort((a, b) => a[1] - b[1]).map(b => [Math.max(0, b[0] - 1) / W, Math.max(0, b[1] - 1) / H, Math.min(W, b[2] + 2) / W, Math.min(H, b[3] + 2) / H])
     });
   }
   v.removeAttribute("src"); v.load();
@@ -1087,7 +1111,7 @@ function capsToResult(list, D) {
       const b = k.box.map(x => clamp(+x || 0, 0, 1));
       const box = [Math.min(b[0], b[2]), Math.min(b[1], b[3]), Math.max(b[0], b[2]), Math.max(b[1], b[3])];
       const col = hex(k.color, "#FFFFFF");
-      const c = { id: uid(), text: k.text, start: clamp(+k.start || 0, 0, D), end: clamp(+k.end || D, 0, D), box, color: col, hl: hex(k.highlight, col), stroke: k.stroke ? hex(k.stroke, null) : null, rot: clamp(+k.rotation || 0, -20, 20) };
+      const c = { id: uid(), lines: Array.isArray(k.lines) && k.lines.length ? k.lines : null, text: k.text, start: clamp(+k.start || 0, 0, D), end: clamp(+k.end || D, 0, D), box, color: col, hl: hex(k.highlight, col), stroke: k.stroke ? hex(k.stroke, null) : null, rot: clamp(+k.rotation || 0, -20, 20) };
       if (c.end <= c.start) c.end = Math.min(D, c.start + 1.5);
       if (c.end >= D - 0.6) c.end = D;
       return c;
@@ -1109,18 +1133,235 @@ async function captureStill(ex) {
   S.variants.filter(v => v.exId === ex.id).forEach(drawThumb);
 }
 
+/* ---------- changement de police : masque des lettres, effacement, réécriture ---------- */
+// Polices proposées (Google Fonts). w = graisse utilisée.
+const FONTS = [
+  { n: "Montserrat", w: 900 }, { n: "Poppins", w: 800 }, { n: "Anton", w: 400 }, { n: "Bebas Neue", w: 400 },
+  { n: "Oswald", w: 700 }, { n: "Archivo Black", w: 400 }, { n: "Inter", w: 800 }, { n: "Roboto", w: 900 },
+  { n: "Raleway", w: 900 }, { n: "Rubik", w: 800 }, { n: "Kanit", w: 800 }, { n: "Fredoka", w: 700 },
+  { n: "Luckiest Guy", w: 400 }, { n: "Bangers", w: 400 }, { n: "Titan One", w: 400 }, { n: "Righteous", w: 400 },
+  { n: "Russo One", w: 400 }, { n: "Permanent Marker", w: 400 }, { n: "Pacifico", w: 400 }, { n: "Lobster", w: 400 },
+  { n: "Caveat", w: 700 }, { n: "Playfair Display", w: 900 }, { n: "Lilita One", w: 400 }, { n: "Bowlby One", w: 400 }
+];
+const fontOf = n => FONTS.find(f => f.n === n) || null;
+const fontCss = (f, px) => `${f.w} ${Math.max(1, px).toFixed(1)}px "${f.n}"`;
+(() => { // une seule feuille de style pour toutes les polices
+  const fam = FONTS.map(f => "family=" + f.n.replace(/ /g, "+") + (f.w !== 400 ? ":wght@" + f.w : "")).join("&");
+  const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?" + fam + "&display=swap"; document.head.appendChild(l);
+})();
+const fontReady = {};
+function loadFont(n) { const f = fontOf(n); if (!f) return Promise.resolve(); return fontReady[n] || (fontReady[n] = document.fonts.load(fontCss(f, 64), "AaBb12").catch(() => { }).then(() => { dirty = true; })); }
+
+/* lecture des mots (Tesseract, hébergé sur le site) */
+let ocrWorker = null;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("chargement impossible : " + src)); document.head.appendChild(s); }); }
+async function getOCR() {
+  if (ocrWorker) return ocrWorker;
+  ocrWorker = (async () => {
+    const base = new URL("ocr/", location.href).href;
+    if (!window.Tesseract) await loadScript(base + "tesseract.min.js");
+    const w = await Tesseract.createWorker("eng", 1, { workerPath: base + "worker.min.js", corePath: base, langPath: base, gzip: true, logger: () => { } });
+    await w.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
+    return w;
+  })();
+  try { return await ocrWorker; } catch (e) { ocrWorker = null; throw e; }
+}
+const sigOf = c => [...c.box, c.start, c.end].map(q => (+q).toFixed(3)).join(",");
+const placeholder = c => !c.text || /^Texte \d+$|^Nouveau texte$/.test(c.text.trim());
+
+/* Masque exact des lettres + contour d'un texte, en pleine résolution.
+   Pixels clairs bordés de sombre (ou l'inverse) et identiques sur plusieurs images du texte. */
+async function prepCaption(ex, c, vid) {
+  const W = vid.videoWidth, H = vid.videoHeight;
+  const mx = Math.round(W * 0.02), my = Math.round(H * 0.01);
+  const x0 = Math.max(0, Math.floor(c.box[0] * W) - mx), y0 = Math.max(0, Math.floor(c.box[1] * H) - my);
+  const x1 = Math.min(W, Math.ceil(c.box[2] * W) + mx), y1 = Math.min(H, Math.ceil(c.box[3] * H) + my);
+  const w = x1 - x0, h = y1 - y0, N = w * h; if (w < 4 || h < 4) return;
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h; const cx = cv.getContext("2d", { willReadFrequently: true });
+  const d = c.end - c.start, ts = d > 0.6 ? [c.start + d * 0.15, c.start + d * 0.5, c.end - d * 0.15] : [c.start + d * 0.5];
+  const fr = [];
+  for (const t of ts) { vid.currentTime = clamp(t, 0, vid.duration - 0.04); await once(vid, "seeked"); cx.drawImage(vid, x0, y0, w, h, 0, 0, w, h); fr.push(cx.getImageData(0, 0, w, h).data); }
+  const r = Math.max(2, Math.round(W / 360));
+  const lumOf = D => { const L = new Uint8Array(N); for (let i = 0, j = 0; i < N; i++, j += 4) L[i] = (D[j] * 77 + D[j + 1] * 150 + D[j + 2] * 29) >> 8; return L; };
+  const Ls = fr.map(lumOf), L = Ls[Math.floor(Ls.length / 2)], D = fr[Math.floor(fr.length / 2)];
+  const filt = (A, isMax) => { const a = new Uint8Array(N), b = new Uint8Array(N);
+    for (let y = 0; y < h; y++) { const o = y * w; for (let x = 0; x < w; x++) { let m = A[o + x]; for (let k = Math.max(0, x - r), e = Math.min(w - 1, x + r); k <= e; k++) { const q = A[o + k]; if (isMax ? q > m : q < m) m = q; } a[o + x] = m; } }
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) { let m = a[y * w + x]; for (let k = Math.max(0, y - r), e = Math.min(h - 1, y + r); k <= e; k++) { const q = a[k * w + x]; if (isMax ? q > m : q < m) m = q; } b[y * w + x] = m; }
+    return b; };
+  const mn = filt(L, false), mxx = filt(L, true);
+  const lf = lum(c.color) * 255, ls = c.stroke ? lum(c.stroke) * 255 : null;
+  const fill = new Uint8Array(N), T = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    const l = L[i], steady = Ls.every(o => Math.abs(o[i] - l) <= 22);
+    if (!steady && Ls.length > 1) continue;
+    const isF = l - mn[i] >= 70 && Math.abs(l - lf) < 90, isS = ls != null ? (mxx[i] - l >= 70 && Math.abs(l - ls) < 70) : false;
+    if (isF) fill[i] = 1; if (isF || isS) T[i] = 1;
+  }
+  // couleurs proches de la couleur du texte (lettres sans contour net)
+  const col = rgb(c.color).map(v => v * 255), hl = rgb(c.hl).map(v => v * 255);
+  for (let i = 0, j = 0; i < N; i++, j += 4) if (!T[i] && (Ls.length < 2 || Ls.every(o => Math.abs(o[i] - L[i]) <= 22))) {
+    const dc = Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]), dh = Math.hypot(D[j] - hl[0], D[j + 1] - hl[1], D[j + 2] - hl[2]);
+    if (Math.min(dc, dh) < 40 && mxx[i] - mn[i] > 60) { T[i] = 1; fill[i] = 1; }
+  }
+  // on ne garde que l'intérieur du cadre du texte (+ marge du contour)
+  const bx0 = Math.round(c.box[0] * W) - x0 - r, by0 = Math.round(c.box[1] * H) - y0 - r, bx1 = Math.round(c.box[2] * W) - x0 + r, by1 = Math.round(c.box[3] * H) - y0 + r;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < bx0 || x > bx1 || y < by0 || y > by1) { T[y * w + x] = 0; fill[y * w + x] = 0; }
+  // élargit un peu (bords adoucis du texte)
+  const g = Math.max(2, Math.round(W / 400)), M = new Uint8Array(N);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (T[y * w + x]) for (let yy = Math.max(0, y - g); yy <= Math.min(h - 1, y + g); yy++) for (let xx = Math.max(0, x - g); xx <= Math.min(w - 1, x + g); xx++) M[yy * w + xx] = 1;
+  let cnt = 0; for (let i = 0; i < N; i++) cnt += M[i];
+  if (cnt < 30) return;
+  c.mk = { x: x0, y: y0, w, h, W, H, m: M }; c.plans = {}; c.sig = sigOf(c);
+  // image noir sur blanc des lettres pour la lecture des mots
+  if (placeholder(c) || !c.tl) {
+    const sc = clamp(64 / Math.max(8, (c.box[3] - c.box[1]) * H / Math.max(1, (c.lines || [c.box]).length)), 1, 3);
+    const oc = document.createElement("canvas"); oc.width = Math.round(w * sc) + 40; oc.height = Math.round(h * sc) + 40;
+    const ox = oc.getContext("2d"); ox.fillStyle = "#fff"; ox.fillRect(0, 0, oc.width, oc.height);
+    const bw = document.createElement("canvas"); bw.width = w; bw.height = h; const bctx = bw.getContext("2d"); const im = bctx.createImageData(w, h);
+    for (let i = 0; i < N; i++) { const v = fill[i] ? 0 : 255; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; }
+    bctx.putImageData(im, 0, 0); ox.imageSmoothingEnabled = true; ox.drawImage(bw, 20, 20, w * sc, h * sc);
+    try {
+      const wk = await getOCR(); const { data } = await wk.recognize(oc);
+      const lines = (data.lines || []).map(l => (l.words || []).filter(wd => wd.text && wd.text.trim() && wd.confidence > 20).map(wd => {
+        // mot en couleur ? on compare la couleur des lettres sous le mot
+        const ax = Math.max(0, Math.floor((wd.bbox.x0 - 20) / sc)), ay = Math.max(0, Math.floor((wd.bbox.y0 - 20) / sc)), bx = Math.min(w, Math.ceil((wd.bbox.x1 - 20) / sc)), by = Math.min(h, Math.ceil((wd.bbox.y1 - 20) / sc));
+        let nc = 0, nh = 0; for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) { const i = y * w + x; if (!fill[i]) continue; const j = i * 4; const dc = Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]), dh = Math.hypot(D[j] - hl[0], D[j + 1] - hl[1], D[j + 2] - hl[2]); if (dh + 20 < dc) nh++; else nc++; }
+        return { t: wd.text.trim(), hl: hasHl(c) && nh > nc };
+      })).filter(l => l.length);
+      if (lines.length && placeholder(c)) { c.tl = lines; c.text = lines.map(l => l.map(x => x.t).join(" ")).join("\n"); }
+    } catch (e) { console.warn("lecture des mots", e); }
+  }
+  if (!c.tl && !placeholder(c)) c.tl = textLines(c.text, null);
+}
+function textLines(text, old) {
+  const flat = old ? old.flat() : [];
+  let k = 0;
+  return String(text || "").split(/\n/).map(s => s.trim()).filter(Boolean).map(s => s.split(/\s+/).map(t => { const o = flat[k++]; return { t, hl: !!(o && o.hl && o.t.toLowerCase() === t.toLowerCase()) }; }));
+}
+/* prépare tous les textes d'une variante 1 (une fois) */
+async function prepEx(ex, onMsg) {
+  if (!ex.result || !ex.url) return;
+  if (ex.prep) return ex.prep;
+  ex.prepBusy = true; renderDrops();
+  ex.prep = (async () => {
+    const vid = document.createElement("video"); vid.muted = true; vid.preload = "auto"; vid.src = ex.url; await once(vid, "loadeddata");
+    const caps = ex.result.captions.filter(c => !c.mk || c.sig !== sigOf(c));
+    for (let i = 0; i < caps.length; i++) { if (onMsg) onMsg(`Lecture des mots ${i + 1}/${caps.length}…`); ex.prepMsg = `lecture des mots ${i + 1}/${caps.length}…`; setExMsg(ex, ex.msg); try { await prepCaption(ex, caps[i], vid); } catch (e) { console.warn(e); } }
+    vid.removeAttribute("src"); vid.load();
+    dirty = true; S.variants.filter(v => v.exId === ex.id).forEach(drawThumb);
+    if (S.selected === ex.id || (current() && current().exId === ex.id)) renderEditor();
+  })();
+  try { await ex.prep; } finally { ex.prepDone = true; ex.prepBusy = false; ex.prepMsg = ""; renderDrops(); }
+}
+let prepT = 0;
+function schedulePrep(ex) { clearTimeout(prepT); prepT = setTimeout(async () => { if (ex.prep) { try { await ex.prep; } catch (e) { } } ex.prep = null; prepEx(ex); }, 900); }
+function invalidatePrep(ex) { if (!ex || !ex.result) return; ex.result.captions.forEach(c => { c.mk = null; c.plans = {}; }); ex.prep = null; ex.prepDone = false; }
+
+/* plan d'effacement : pour chaque pixel du masque, les 4 pixels de décor les plus proches (gauche, droite, haut, bas) */
+function planFor(c, W, H) {
+  const k = W + "x" + H; c.plans = c.plans || {}; if (c.plans[k]) return c.plans[k];
+  const mk = c.mk, sx = W / mk.W, sy = H / mk.H;
+  const x = Math.max(0, Math.floor(mk.x * sx) - 1), y = Math.max(0, Math.floor(mk.y * sy) - 1);
+  const w = Math.min(W - x, Math.ceil(mk.w * sx) + 2), h = Math.min(H - y, Math.ceil(mk.h * sy) + 2), N = w * h;
+  const M = new Uint8Array(N);
+  for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+    const ux = Math.floor((x + xx) / sx) - mk.x, uy = Math.floor((y + yy) / sy) - mk.y;
+    if (ux >= 0 && uy >= 0 && ux < mk.w && uy < mk.h && mk.m[uy * mk.w + ux]) M[yy * w + xx] = 1;
+  }
+  const idx = []; for (let i = 0; i < N; i++) if (M[i]) idx.push(i);
+  const n = idx.length, nb = new Int32Array(n * 4), wt = new Float32Array(n * 4);
+  const L = new Int32Array(N).fill(-1), R = new Int32Array(N).fill(-1), U = new Int32Array(N).fill(-1), Dn = new Int32Array(N).fill(-1);
+  for (let yy = 0; yy < h; yy++) { let last = -1; for (let xx = 0; xx < w; xx++) { const i = yy * w + xx; if (!M[i]) last = xx; else L[i] = last; } last = -1; for (let xx = w - 1; xx >= 0; xx--) { const i = yy * w + xx; if (!M[i]) last = xx; else R[i] = last; } }
+  for (let xx = 0; xx < w; xx++) { let last = -1; for (let yy = 0; yy < h; yy++) { const i = yy * w + xx; if (!M[i]) last = yy; else U[i] = last; } last = -1; for (let yy = h - 1; yy >= 0; yy--) { const i = yy * w + xx; if (!M[i]) last = yy; else Dn[i] = last; } }
+  for (let k2 = 0; k2 < n; k2++) {
+    const i = idx[k2], xx = i % w, yy = (i - xx) / w, c4 = [[L[i], 0], [R[i], 0], [U[i], 1], [Dn[i], 1]];
+    let s = 0;
+    c4.forEach(([p, vert], q) => { if (p < 0) { nb[k2 * 4 + q] = i; wt[k2 * 4 + q] = 0; return; } const dist = vert ? Math.abs(p - yy) : Math.abs(p - xx); const ww = 1 / (dist * dist); nb[k2 * 4 + q] = vert ? p * w + xx : yy * w + p; wt[k2 * 4 + q] = ww; s += ww; });
+    for (let q = 0; q < 4; q++) wt[k2 * 4 + q] = s ? wt[k2 * 4 + q] / s : 0;
+  }
+  return (c.plans[k] = { x, y, w, h, idx: Int32Array.from(idx), nb, wt });
+}
+function erase(ctx, c, W, H) {
+  const p = planFor(c, W, H); if (!p.idx.length) return;
+  const im = ctx.getImageData(p.x, p.y, p.w, p.h), d = im.data, src = new Uint8ClampedArray(d);
+  for (let k = 0; k < p.idx.length; k++) {
+    const o = p.idx[k] * 4, b = k * 4; let r = 0, g = 0, bl = 0;
+    for (let q = 0; q < 4; q++) { const ww = p.wt[b + q]; if (!ww) continue; const s = p.nb[b + q] * 4; r += src[s] * ww; g += src[s + 1] * ww; bl += src[s + 2] * ww; }
+    d[o] = r; d[o + 1] = g; d[o + 2] = bl;
+  }
+  ctx.putImageData(im, p.x, p.y);
+}
+/* réécrit le texte : mêmes lignes, même place, même hauteur que l'original */
+function drawText(ctx, c, v, W, H) {
+  const f = fontOf(v.font); if (!f || !c.tl || !c.tl.length) return;
+  const col = colorsFor(v, c), per = (v.per && v.per[c.id]) || {};
+  const lines = c.tl, lb = (c.lines && c.lines.length === lines.length) ? c.lines : null;
+  const bx = c.box.map((q, i) => q * (i % 2 ? H : W));
+  const n = lines.length, slotH = (bx[3] - bx[1]) / n;
+  const boxes = lb ? lb.map(b => b.map((q, i) => q * (i % 2 ? H : W))) : lines.map((_, i) => [bx[0], bx[1] + i * slotH, bx[2], bx[1] + (i + 1) * slotH]);
+  const hasStroke = !!c.stroke && v.strokeOn !== false;
+  const strokeCol = per.stroke || v.stroke || strokeOf(c);
+  // alignement : bords gauches alignés → à gauche ; droits → à droite ; sinon centré
+  const tolA = W * 0.015, lefts = boxes.map(b => b[0]), rights = boxes.map(b => b[2]);
+  const align = n > 1 && Math.max(...lefts) - Math.min(...lefts) < tolA && Math.max(...rights) - Math.min(...rights) > tolA * 2 ? "left" : n > 1 && Math.max(...rights) - Math.min(...rights) < tolA && Math.max(...lefts) - Math.min(...lefts) > tolA * 2 ? "right" : "center";
+  const probe = 100; ctx.font = fontCss(f, probe);
+  const sw = hasStroke ? 0.14 : 0; // épaisseur du contour (proportion de la taille)
+  let size = Infinity;
+  lines.forEach((ln, i) => {
+    const s = ln.map(x => x.t).join(" "), m = ctx.measureText(s), b = boxes[i];
+    const hh = (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / probe + sw, ww = m.width / probe + sw;
+    const capM = ctx.measureText("H"); const capH = capM.actualBoundingBoxAscent / probe + sw;
+    const byH = (b[3] - b[1]) / Math.max(hh, capH * 1.02), byW = Math.max(b[2] - b[0], W * 0.2) * 1.12 / ww;
+    size = Math.min(size, byH, byW, (W * 0.94) / ww);
+  });
+  size *= (v.size || 1); if (!isFinite(size) || size < 4) return;
+  ctx.font = fontCss(f, size); ctx.textBaseline = "alphabetic"; ctx.lineJoin = "round"; ctx.miterLimit = 2;
+  lines.forEach((ln, i) => {
+    const b = boxes[i], words = ln.map(x => x.t), sp = ctx.measureText(" ").width;
+    const ws = words.map(t => ctx.measureText(t).width), tw = ws.reduce((a, q) => a + q, 0) + sp * (words.length - 1);
+    const m = ctx.measureText(words.join(" ")), gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+    const base = (b[1] + b[3]) / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2 + (gh ? 0 : 0);
+    let x = align === "left" ? b[0] + size * sw / 2 : align === "right" ? b[2] - tw - size * sw / 2 : (b[0] + b[2]) / 2 - tw / 2;
+    if (hasStroke) { ctx.lineWidth = size * sw; ctx.strokeStyle = strokeCol; let xx = x; words.forEach((t, k) => { ctx.strokeText(t, xx, base); xx += ws[k] + sp; }); }
+    let xx = x; words.forEach((t, k) => { ctx.fillStyle = ln[k].hl ? col.hl : col.fill; ctx.fillText(t, xx, base); xx += ws[k] + sp; });
+  });
+}
+function fontActive(v, c) { return !!(v && v.font && fontOf(v.font) && c.mk && c.tl && c.tl.length); }
+/* dessine une image complète d'une variante dans un canvas 2D (vidéo + textes réécrits) */
+function composeFont(ctx, src, W, H, ex, v, t) {
+  ctx.drawImage(src, 0, 0, W, H);
+  for (const c of ex.result.captions) {
+    if (t < c.start - 0.01 || t > c.end + 0.01 || !fontActive(v, c)) continue;
+    erase(ctx, c, W, H); drawText(ctx, c, v, W, H);
+  }
+}
+/* textes encore à recolorer à l'ancienne (police non disponible pour eux) */
+const recolorOnly = (ex, v) => v && v.font ? ex.result.captions.filter(c => !fontActive(v, c)) : null;
+
 /* ---------- generator ---------- */
+function allColors() { return [...(S.settings.custom || []).map(h => ({ n: "Perso " + h, fill: h, hl: "#FFFFFF", custom: true })), ...PAL]; }
+function fontPool() { const off = S.settings.fontsOff || []; const p = FONTS.filter(f => !off.includes(f.n)); return p.length ? p : FONTS; }
+function renderFonts() {
+  $("#optFont").checked = S.settings.fontOn !== false; $("#fontBox").style.opacity = S.settings.fontOn !== false ? "1" : ".45";
+  const off = S.settings.fontsOff || [];
+  $("#fontPal").innerHTML = FONTS.map((f, i) => `<button class="pchip ${off.includes(f.n) ? "off" : ""}" data-font="${i}" type="button" aria-pressed="${!off.includes(f.n)}" style="font-family:'${f.n}';font-weight:${f.w}">${esc(f.n)}</button>`).join("");
+}
+$("#fontPal").addEventListener("click", e => { const b = e.target.closest("[data-font]"); if (!b) return; const n = FONTS[+b.dataset.font].n; const off = S.settings.fontsOff = S.settings.fontsOff || []; const i = off.indexOf(n); if (i >= 0) off.splice(i, 1); else if (off.length < FONTS.length - 1) off.push(n); saveSettings(); renderFonts(); });
+$("#optFont").onchange = e => { S.settings.fontOn = e.target.checked; saveSettings(); renderFonts(); };
+$("#addCol").onclick = () => { const h = $("#customCol").value.toUpperCase(); S.settings.custom = S.settings.custom || []; if (!S.settings.custom.includes(h)) S.settings.custom.unshift(h); saveSettings(); renderPalette(); toast("Couleur ajoutée : elle sera utilisée en premier."); };
 function renderPalette() {
-  $("#palette").innerHTML = PAL.map((p, i) => `<button class="pchip ${S.settings.off.includes(p.n) ? "off" : ""}" data-pal="${i}" type="button" aria-pressed="${!S.settings.off.includes(p.n)}" title="${p.n}"><i style="background:${p.fill}"></i>${p.n}</button>`).join("");
+  renderFonts();
+  $("#palette").innerHTML = (S.settings.custom || []).map(h => `<button class="pchip" data-custom="${h}" type="button" title="Retirer ${h}"><i style="background:${h}"></i>${h} ✕</button>`).join("") + PAL.map((p, i) => `<button class="pchip ${S.settings.off.includes(p.n) ? "off" : ""}" data-pal="${i}" type="button" aria-pressed="${!S.settings.off.includes(p.n)}" title="${p.n}"><i style="background:${p.fill}"></i>${p.n}</button>`).join("");
 }
 $("#palette").addEventListener("click", e => {
+  const cu = e.target.closest("[data-custom]"); if (cu) { S.settings.custom = (S.settings.custom || []).filter(h => h !== cu.dataset.custom); saveSettings(); renderPalette(); return; }
   const b = e.target.closest("[data-pal]"); if (!b) return; const n = PAL[+b.dataset.pal].n;
   const off = S.settings.off; const i = off.indexOf(n); if (i >= 0) off.splice(i, 1); else if (off.length < PAL.length - 1) off.push(n);
   saveSettings(); renderPalette();
 });
 function colorForIndex(ex, k) {
   const base = ex.result.captions[0] ? ex.result.captions[0].color : "#FFFFFF";
-  const pool = PAL.filter(p => !S.settings.off.includes(p.n) && cdist(p.fill, base) > 70);
+  const pool = allColors().filter(p => p.custom || (!S.settings.off.includes(p.n) && cdist(p.fill, base) > 70));
   if (k < pool.length) { const p = pool[k]; const hl = HL_ALT.find(h => cdist(h, p.fill) > 120) || "#FFFFFF"; return { n: p.n, fill: p.fill, hl }; }
   const h = (k * 137.508 + 20) % 360, fill = hsl(h, 90, 62);
   return { n: "Teinte " + Math.round(h) + "°", fill, hl: lum(fill) > 0.6 ? "#111111" : "#FFFFFF" };
@@ -1129,13 +1370,18 @@ function makeVariant(ex) {
   ex.k = ex.k || 0;
   const used = new Set(S.variants.filter(v => v.exId === ex.id).map(v => v.fill));
   let col; do { col = colorForIndex(ex, ex.k++); } while (used.has(col.fill) && ex.k < 400);
-  return { id: uid(), auto: true, n: ++S.counter, exId: ex.id, srcName: ex.name, fill: col.fill, hl: col.hl, colName: col.n, per: {} };
+  let font = null; if (S.settings.fontOn !== false) { const pool = fontPool(); font = pool[(S.fontK = (S.fontK || 0) + 1) % pool.length].n; loadFont(font); }
+  return { id: uid(), auto: true, n: ++S.counter, exId: ex.id, srcName: ex.name, fill: col.fill, hl: col.hl, colName: col.n, per: {}, font };
 }
 function nextColor(v) {
   const ex = exById(v.exId); if (!ex) return;
   const used = new Set(S.variants.map(x => x.fill)); let col;
   do { col = colorForIndex(ex, ex.k++); } while (used.has(col.fill) && ex.k < 400);
   Object.assign(v, { fill: col.fill, hl: col.hl, colName: col.n, per: {} }); variantChanged(v); updateChips(v);
+}
+function nextFont(v) {
+  const pool = fontPool(); const i = pool.findIndex(f => f.n === v.font); v.font = pool[(i + 1) % pool.length].n;
+  loadFont(v.font); const ex = exById(v.exId); if (ex) prepEx(ex); variantChanged(v); updateChips(v);
 }
 function renumber() { S.variants.forEach((v, i) => v.n = i + 2); S.counter = S.variants.length + 1; }
 function autoBatch() {
@@ -1151,7 +1397,7 @@ function fillTo(total) {
   if (!exs.length) { toast("Ajoute d’abord tes variantes 1 dans le Dépôt et attends que Claude ait repéré leur texte."); return; }
   const keep = S.variants.filter(v => v.auto === false || v.blob);
   S.variants = keep;
-  exs.forEach(ex => { ex.k = 0; });
+  exs.forEach(ex => { ex.k = 0; }); S.fontK = Math.floor(Math.random() * fontPool().length);
   let i = 0;
   while (S.variants.length < total) {
     const counts = exs.map(ex => S.variants.filter(v => v.exId === ex.id).length);
@@ -1175,10 +1421,11 @@ const thumbCanvas = $("#thumbGL"); let RT = null; try { RT = makeRenderer(thumbC
 function drawThumb(v) {
   const cv = document.querySelector(`.vcard[data-id="${v.id}"] canvas`); const ex = exById(v.exId); if (!cv || !ex || !ex.still || !RT) return;
   thumbCanvas.width = ex.still.width; thumbCanvas.height = ex.still.height;
-  RT.draw(ex.still, recolorItems(ex, v, ex.stillT));
+  if (v.font) { loadFont(v.font).then(() => { if (!v._th) { v._th = 1; drawThumb(v); v._th = 0; } }); const tc = document.createElement("canvas"); tc.width = ex.still.width; tc.height = ex.still.height; const tx = tc.getContext("2d", { willReadFrequently: true }); composeFont(tx, ex.still, tc.width, tc.height, ex, v, ex.stillT); RT.draw(tc, recolorItems(ex, v, ex.stillT)); }
+  else RT.draw(ex.still, recolorItems(ex, v, ex.stillT));
   cv.width = ex.still.width; cv.height = ex.still.height; cv.getContext("2d").drawImage(thumbCanvas, 0, 0);
 }
-function chipsHtml(v) { return `<span class="chip"><i style="background:${v.fill}"></i>${esc(v.colName || "Personnalisée")}</span>${v.auto === false ? `<span class="chip">Retouchée</span>` : ""}`; }
+function chipsHtml(v) { const f = fontOf(v.font); return `<span class="chip"><i style="background:${v.fill}"></i>${esc(v.colName || "Personnalisée")}</span>${f ? `<span class="chip" style="font-family:'${f.n}';font-weight:${f.w}">${esc(f.n)}</span>` : ""}${v.auto === false ? `<span class="chip">Retouchée</span>` : ""}`; }
 function updateChips(v) { const el = document.querySelector(`.vcard[data-id="${v.id}"] .chips`); if (el) el.innerHTML = chipsHtml(v); }
 function renderVariants() {
   $("#reelTitle").textContent = S.variants.length ? `Variantes 2 · ${S.variants.length}` : "Variantes 2";
@@ -1197,7 +1444,8 @@ function renderVariants() {
       </div>
       <div class="vfoot">
         <button class="btn sm" data-va="open" type="button">Voir</button>
-        <button class="btn sm ghost" data-va="next" type="button" title="Autre couleur">↻ Autre couleur</button>
+        <button class="btn sm ghost" data-va="next" type="button" title="Autre couleur">↻ Couleur</button>
+        <button class="btn sm ghost" data-va="font" type="button" title="Autre police">↻ Police</button>
         <span class="sp"></span>
       </div>
     </article>`).join("");
@@ -1211,6 +1459,7 @@ $("#vgrid").addEventListener("click", e => {
   if (!b) return;
   if (b.dataset.va === "del") { S.variants = S.variants.filter(x => x !== v); renumber(); if (S.selected === v.id) S.selected = v.exId; renderAll(); }
   if (b.dataset.va === "next") { nextColor(v); if (S.selected === v.id) renderEditor(); }
+  if (b.dataset.va === "font") { nextFont(v); if (S.selected === v.id) renderEditor(); }
 });
 $("#btnClear").onclick = () => {
   const b = $("#btnClear"); if (!S.variants.length) return;
@@ -1245,7 +1494,9 @@ async function renderVideo(v, onProg, slot = 0) {
   const vid = document.createElement("video"); vid.playsInline = true; vid.preload = "auto"; vid.src = ex.url; await once(vid, "loadeddata");
   const W = vid.videoWidth, H = vid.videoHeight, srcDur = vid.duration;
   const { cv, r, release } = exportRenderer(W, H);
-  const draw = t => r.draw(vid, recolorItems(ex, v, t));
+  let cc = null;
+  if (v.font) { await prepEx(ex); await loadFont(v.font); const c2 = document.createElement("canvas"); c2.width = W; c2.height = H; cc = { cv: c2, ctx: c2.getContext("2d", { willReadFrequently: true }) }; }
+  const draw = t => { if (cc) { composeFont(cc.ctx, vid, W, H, ex, v, t); r.draw(cc.cv, recolorItems(ex, v, t)); } else r.draw(vid, recolorItems(ex, v, t)); };
   draw(0);
   // « Comme la source » : une image enregistrée pour chaque image de la vidéo d'origine (même cadence).
   const fpsSel = $("#selFps").value;
@@ -1816,8 +2067,8 @@ function makeZip(files) {
 /* ---------- project file ---------- */
 function serial() {
   return { v: 3, settings: S.settings,
-    examples: S.examples.map(x => ({ id: x.id, name: x.name, size: x.size, w: x.w, h: x.h, dur: x.dur, tol: x.tol, result: x.result || null })),
-    variants: S.variants.map(v => ({ id: v.id, n: v.n, exId: v.exId, srcName: v.srcName, fill: v.fill, hl: v.hl, colName: v.colName, per: v.per, auto: v.auto })) };
+    examples: S.examples.map(x => ({ id: x.id, name: x.name, size: x.size, w: x.w, h: x.h, dur: x.dur, tol: x.tol, result: x.result ? { ...x.result, captions: x.result.captions.map(({ mk, plans, sig, ...c }) => c) } : null })),
+    variants: S.variants.map(v => ({ id: v.id, n: v.n, exId: v.exId, srcName: v.srcName, fill: v.fill, hl: v.hl, colName: v.colName, per: v.per, auto: v.auto, font: v.font || null, size: v.size, stroke: v.stroke, strokeOn: v.strokeOn })) };
 }
 $("#btnSave").onclick = () => saveFile("projet_variantes.json", JSON.stringify(serial(), null, 2));
 $("#btnOpen").onclick = () => { $("#fileProject").value = ""; $("#fileProject").click(); };
@@ -1853,6 +2104,7 @@ if (!window.VX_CFG.clientId || !window.VX_CFG.apiKey) setTimeout(openSettings, 4
   }
   sampleReady = true; renderDrops(); runQueue();
 })();
+window.__vx = { S, select, seek, get dirty() { return dirty; } }; // accès de diagnostic
 })();
 </script>
 </body>
