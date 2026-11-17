@@ -345,7 +345,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-17 a (texte réécrit)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-17 b (texte enregistré)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -706,7 +706,7 @@ function renderEditor() {
   const caps = [...ex.result.captions].sort((a, b) => a.start - b.start);
   if (!isVariant(it)) {
     ed.innerHTML = `
-      <div class="note">Voici ta <b>variante 1</b>. Les cadres montrent le texte repéré par Claude. Vérifie qu’ils entourent bien chaque texte : déplace un cadre sur la vidéo, tire son coin jaune pour l’agrandir. La couleur du texte doit correspondre à celle de la vidéo (bouton pipette ◉ pour la prendre directement sur l’image).</div>
+      <div class="note">Voici ta <b>variante 1</b> : elle sert de modèle. Le texte lu est <b>enregistré ci-dessous</b> et sera réécrit dans chaque variante 2 avec une autre police et une autre couleur. Vérifie les mots (corrige-les si besoin) et que chaque cadre entoure bien son texte sur la vidéo.</div>
       <div class="style-grid">
         <label class="fld"><span>Sensibilité · ${Math.round((ex.tol || 0.22) * 100)}</span><input type="range" id="exTol" min="0.08" max="0.45" step="0.01" value="${ex.tol || 0.22}"></label>
         <label class="chk"><input type="checkbox" id="exTest" ${ex.test ? "checked" : ""}> Tester le changement de couleur</label>
@@ -714,6 +714,7 @@ function renderEditor() {
       <div class="row" style="justify-content:space-between"><span class="hint">${caps.length} texte${caps.length > 1 ? "s" : ""} repéré${caps.length > 1 ? "s" : ""}</span><button class="btn sm" id="btnAddZone" type="button">+ Zone de texte au temps actuel</button></div>
       <div class="caps">${caps.map((c, i) => `
         <div class="cap ${S.selCap === c.id ? "sel" : ""}" data-id="${c.id}">
+          <div class="hint" style="margin:0 0 4px">${c.tl && c.tl.length ? (c.byGemini ? "✓ Texte enregistré (lu par Gemini)" : c.userText ? "✓ Texte enregistré (corrigé par toi)" : "✓ Texte enregistré — vérifie les mots") : (exOf(current()) && exOf(current()).prepBusy ? "Lecture du texte…" : "⚠ Écris le texte exact ici")}</div>
           <textarea class="cap-text" id="t-${c.id}" data-f="text" rows="${Math.max(1, String(c.text).split("\n").length)}" aria-label="Texte ${i + 1}" placeholder="Écris le texte exact (une ligne par ligne de la vidéo)">${esc(c.text)}</textarea>
           <div class="cap-line">
             <span class="cap-n">#${i + 1}</span>
@@ -775,7 +776,7 @@ $("#editor").addEventListener("input", e => {
   if (t.dataset.vf) { it.per = it.per || {}; it.per[c.id] = Object.assign({}, it.per[c.id], { [t.dataset.vf]: t.value.toUpperCase() }); variantChanged(it); return; }
   const f = t.dataset.f; if (!f) return;
   c[f] = ["start", "end"].includes(f) ? (+t.value || 0) : f === "text" ? t.value : t.value.toUpperCase();
-  if (f === "text") { c.tl = textLines(t.value, c.tl); exChanged(ex, true); return; }
+  if (f === "text") { c.userText = true; c.tl = textLines(t.value, c.tl); exChanged(ex, true); S.variants.filter(v => v.exId === ex.id).forEach(v => { v.blob = null; }); return; }
   exChanged(ex);
 });
 $("#editor").addEventListener("change", e => { if (["exTest", "vFont", "vStrokeOn"].includes(e.target.id)) return; if (["start", "end"].includes(e.target.dataset.f)) renderEditor(); });
@@ -910,9 +911,11 @@ async function runQueue() {
   runQueue(); // lance les suivantes en parallèle (jusqu’à 3)
   try {
     ex.result = await readCaptions(ex);
-    ex.status = "done";
     await captureStill(ex);
-    prepEx(ex).catch(e => console.warn(e));
+    // le texte doit être lu et enregistré AVANT de créer les variantes 2
+    ex.msg = "Lecture du texte…"; setExMsg(ex, ex.msg);
+    try { await prepEx(ex, m => setExMsg(ex, m)); } catch (e) { console.warn(e); }
+    ex.status = "done";
   } catch (err) {
     const code = err && err.code;
     ex.status = "error";
@@ -1231,6 +1234,7 @@ async function prepCaption(ex, c, vid) {
     for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) M[y * w + x] = 1;
   }
   c.mk = { x: x0, y: y0, w, h, W, H, m: M }; c.plans = {}; c.sig = sigOf(c);
+  { const cc = document.createElement("canvas"); cc.width = w; cc.height = h; const im3 = cc.getContext("2d").createImageData(w, h); im3.data.set(D); cc.getContext("2d").putImageData(im3, 0, 0); c._crop = cc; }
   // image noir sur blanc des lettres pour la lecture des mots
   if (placeholder(c) || !c.tl) {
     const sc = clamp(64 / Math.max(8, (c.box[3] - c.box[1]) * H / Math.max(1, (c.lines || [c.box]).length)), 1, 3);
@@ -1300,6 +1304,18 @@ async function prepEx(ex, onMsg) {
     const caps = ex.result.captions.filter(c => !c.mk || c.sig !== sigOf(c));
     for (let i = 0; i < caps.length; i++) { if (onMsg) onMsg(`Lecture des mots ${i + 1}/${caps.length}…`); ex.prepMsg = `lecture des mots ${i + 1}/${caps.length}…`; setExMsg(ex, ex.msg); try { await prepCaption(ex, caps[i], vid); } catch (e) { console.warn(e); } }
     vid.removeAttribute("src"); vid.load();
+    // lecture exacte par Gemini (si une clé est enregistrée) ; sinon on garde la lecture locale
+    if (sampleNS) {
+      const todo = ex.result.captions.filter(c => c._crop && !c.userText);
+      if (todo.length) {
+        if (onMsg) onMsg("Gemini lit le texte exact…");
+        try {
+          const imgs = await Promise.all(todo.map(c => new Promise(r => c._crop.toBlob(r, "image/png"))));
+          const res = await sampleNS.json(`Each image is a cropped caption from an Instagram Reel (image ${todo.map((_, i) => i + 1).join(", ")}). Transcribe the caption text of each image EXACTLY as written: same words, spelling, numbers, punctuation, capitalization and emojis; one entry per visual line, top to bottom. Never translate or correct. Reply only JSON: {"captions":[{"image":1,"lines":["first line","second line"]}]}`, { images: imgs });
+          (res && res.captions || []).forEach(k => { const c = todo[(+k.image || 0) - 1]; const lines = (k.lines || []).map(s => String(s).trim()).filter(Boolean); if (c && lines.length) { c.text = lines.join("\n"); c.tl = textLines(c.text, null); c.byGemini = true; } });
+        } catch (e) { console.warn("Gemini lecture", e); }
+      }
+    }
     dirty = true; S.variants.filter(v => v.exId === ex.id).forEach(drawThumb);
     if (S.selected === ex.id || (current() && current().exId === ex.id)) renderEditor();
   })();
@@ -1565,7 +1581,7 @@ function bitrate(ex) {
   const q = $("#selQuality").value;
   if (q === "high") return 20e6; if (q === "light") return 8e6;
   // Qualité maximale : au moins 1,5 fois le débit de ta vidéo d'origine (jamais moins de 16 Mbit/s).
-  const b = clamp(ex.size * 8 / Math.max(1, ex.dur) * 1.5, 16e6, 80e6);
+  const b = clamp(ex.size * 8 / Math.max(1, ex.dur) * 2, 20e6, 100e6);
   return b;
 }
 function bitrateFor(ex) {
@@ -2158,7 +2174,7 @@ function makeZip(files) {
 /* ---------- project file ---------- */
 function serial() {
   return { v: 3, settings: S.settings,
-    examples: S.examples.map(x => ({ id: x.id, name: x.name, size: x.size, w: x.w, h: x.h, dur: x.dur, tol: x.tol, result: x.result ? { ...x.result, captions: x.result.captions.map(({ mk, plans, sig, ...c }) => c) } : null })),
+    examples: S.examples.map(x => ({ id: x.id, name: x.name, size: x.size, w: x.w, h: x.h, dur: x.dur, tol: x.tol, result: x.result ? { ...x.result, captions: x.result.captions.map(({ mk, plans, sig, _crop, ...c }) => c) } : null })),
     variants: S.variants.map(v => ({ id: v.id, n: v.n, exId: v.exId, srcName: v.srcName, fill: v.fill, hl: v.hl, colName: v.colName, per: v.per, auto: v.auto, font: v.font || null, size: v.size, stroke: v.stroke, strokeOn: v.strokeOn })) };
 }
 $("#btnSave").onclick = () => saveFile("projet_variantes.json", JSON.stringify(serial(), null, 2));
