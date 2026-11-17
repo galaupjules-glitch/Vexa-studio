@@ -291,7 +291,6 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
             <div class="palette" id="palette"></div>
             <div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="hint" style="margin:0">Ta couleur :</span><input type="color" id="customCol" value="#FF3366" aria-label="Choisir une couleur"><button class="btn sm" id="addCol" type="button">+ Ajouter</button></div>
           </div>
-          <label class="chk"><input type="checkbox" id="optFont" checked> Changer aussi la police (seul le texte change, pas la vidéo)</label>
           <div id="fontBox">
             <div class="eyebrow" style="margin-bottom:6px">Polices utilisées <span class="hint" style="text-transform:none;letter-spacing:0">(clique pour activer / retirer)</span></div>
             <div class="palette" id="fontPal"></div>
@@ -346,7 +345,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-16 c (polices)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-17 a (texte réécrit)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -557,12 +556,11 @@ const strokeOf = c => c.stroke || (lum(c.color) > 0.5 ? "#000000" : "#FFFFFF");
 function altOf(v, orig) { const cands = [v.hl, ...PAL.map(p => p.fill)]; return cands.find(x => cdist(x, orig) > 90 && cdist(x, v.fill) > 90) || v.hl; }
 function colorsFor(v, c) {
   const o = (v.per && v.per[c.id]) || {};
-  let fill = o.fill || v.fill; if (!o.fill && cdist(fill, c.color) < 70) fill = altOf(v, c.color);
-  let hl = o.hl || (hasHl(c) ? v.hl : fill); if (!o.hl && hasHl(c) && cdist(hl, c.hl) < 70) hl = altOf(v, c.hl);
-  return { fill, hl };
+  const fill = o.fill || v.fill; // exactement la couleur choisie, pour tout le texte
+  return { fill, hl: fill };
 }
 function recolorItems(ex, v, t, test) {
-  if (!ex || !ex.result || (!v && !test)) return [];
+  if (!ex || !ex.result || (!v && !test) || v) return []; // les variantes 2 ne recolorent jamais la vidéo
   const out = [];
   for (const c of ex.result.captions) {
     if (t < c.start - PAD_T || t > c.end + PAD_T) continue;
@@ -609,7 +607,7 @@ function renderStage() {
   if (!R && stage.getContext("webgl") && !stage.getContext("webgl").isContextLost()) { try { R = makeRenderer(stage); } catch (e) { R = null; } }
   if (v.readyState >= 2 && R) {
     const showOrig = isVariant(it) && $("#optCompare").checked;
-    if (!showOrig && isVariant(it) && it.font) { loadFont(it.font); const cc = compCanvas(ex.w || v.videoWidth, ex.h || v.videoHeight); composeFont(cc.ctx, v, cc.cv.width, cc.cv.height, ex, it, t); R.draw(cc.cv, recolorItems(ex, it, t)); }
+    if (!showOrig && isVariant(it)) { ensureFont(it); loadFont(it.font); const cc = compCanvas(ex.w || v.videoWidth, ex.h || v.videoHeight); composeFont(cc.ctx, v, cc.cv.width, cc.cv.height, ex, it, t); R.draw(cc.cv, recolorItems(ex, it, t)); }
     else R.draw(v, showOrig ? [] : recolorItems(ex, isVariant(it) ? it : null, t, !isVariant(it) && ex.test));
   }
   const showBoxes = !isVariant(it) || $("#optBoxes").checked;
@@ -735,13 +733,12 @@ function renderEditor() {
     ed.innerHTML = `
       <div class="note">Variante 2 de <b>${esc(v.srcName)}</b> : la vidéo de fond est identique, seul le texte change (police, couleur). Coche « Comparer avec la variante 1 » pour voir l’original.${v.font && exOf(v) && !exOf(v).prepDone ? " <b>Lecture des mots en cours…</b>" : ""}</div>
       <div class="style-grid">
-        <label class="mini">Police <select id="vFont"><option value="">Police d’origine (couleur seulement)</option>${FONTS.map(f => `<option value="${esc(f.n)}" ${v.font === f.n ? "selected" : ""} style="font-family:'${f.n}'">${esc(f.n)}</option>`).join("")}</select></label>
+        <label class="mini">Police <select id="vFont">${FONTS.map(f => `<option value="${esc(f.n)}" ${v.font === f.n ? "selected" : ""} style="font-family:'${f.n}'">${esc(f.n)}</option>`).join("")}</select></label>
         <button class="btn sm" id="vNextFont" type="button">↻ Autre police</button>
         <label class="mini">Couleur du texte <input type="color" id="vFill" value="${v.fill}"></label>
-        <label class="mini">Mot surligné <input type="color" id="vHl" value="${v.hl}"></label>
         <button class="btn sm" id="vNext" type="button">↻ Autre couleur</button>
-        ${v.font ? `<label class="mini">Contour <input type="color" id="vStroke" value="${v.stroke || "#000000"}"></label>
-        <label class="chk"><input type="checkbox" id="vStrokeOn" ${v.strokeOn !== false ? "checked" : ""}> Contour</label>
+        ${v.font ? `<label class="mini">Contour <input type="color" id="vStroke" value="${v.stroke || (lum(v.fill) > 0.45 ? "#000000" : "#FFFFFF")}"></label>
+        <label class="chk"><input type="checkbox" id="vStrokeOn" ${(v.strokeOn != null ? v.strokeOn : (exOf(v) && exOf(v).result.captions.some(c => c.stroke))) ? "checked" : ""}> Contour</label>
         <label class="fld"><span>Taille · ${Math.round((v.size || 1) * 100)} %</span><input type="range" id="vSize" min="0.7" max="1.3" step="0.02" value="${v.size || 1}"></label>` : ""}
       </div>
       <span class="hint">Texte (corrige les mots si besoin, une ligne par ligne de la vidéo) et couleur de chaque texte :</span>
@@ -750,7 +747,6 @@ function renderEditor() {
           <div class="cap-line"><span class="cap-n">#${i + 1}</span>${v.font ? `<textarea class="cap-text" data-f="text" rows="${Math.max(1, String(c.text).split("\n").length)}" aria-label="Texte ${i + 1}" placeholder="Écris le texte exact">${esc(c.text)}</textarea>` : `<span class="cap-label">${esc(c.text)}</span>`}</div>
           <div class="cap-line">
             <span class="mini">Texte <input type="color" data-vf="fill" value="${col.fill}"></span>
-            ${hasHl(c) ? `<span class="mini">Mot surligné <input type="color" data-vf="hl" value="${col.hl}"></span>` : ""}
             <button class="icon-btn" data-act="seek" type="button" title="Aller à ce texte" aria-label="Aller à ce texte">↦</button>
           </div>
         </div>`; }).join("")}</div>`;
@@ -773,7 +769,7 @@ $("#editor").addEventListener("input", e => {
   if (t.id === "vStroke") { it.stroke = t.value.toUpperCase(); variantChanged(it); return; }
   if (t.id === "vStrokeOn") { it.strokeOn = t.checked; variantChanged(it); return; }
   if (t.id === "vSize") { it.size = +t.value; t.previousElementSibling.textContent = "Taille · " + Math.round(it.size * 100) + " %"; variantChanged(it); return; }
-  if (t.id === "vFont") { it.font = t.value || null; if (it.font) { loadFont(it.font); prepEx(ex); } variantChanged(it); updateChips(it); renderEditor(); return; }
+  if (t.id === "vFont") { it.font = t.value || it.font; if (it.font) { loadFont(it.font); prepEx(ex); } variantChanged(it); updateChips(it); renderEditor(); return; }
   const row = t.closest(".cap"); if (!row) return;
   const c = ex.result.captions.find(x => x.id === row.dataset.id); if (!c) return;
   if (t.dataset.vf) { it.per = it.per || {}; it.per[c.id] = Object.assign({}, it.per[c.id], { [t.dataset.vf]: t.value.toUpperCase() }); variantChanged(it); return; }
@@ -1223,11 +1219,17 @@ async function prepCaption(ex, c, vid) {
     acc = 0; for (let k = colN.length - 1; k >= 0; k--) { acc += colN[k]; if (acc > tot * 0.005) { tx1 = ax + k; break; } }
     return [(tx0 + x0) / W, (ty0 + y0) / H, (tx1 + 1 + x0) / W, (ty1 + 1 + y0) / H];
   });
+  // ajoute les pixels de la couleur de l'ancien texte dans le cadre exact (bords colorés, sans test d'immobilité)
+  for (const tb of c.tight) { const ax = Math.max(0, Math.floor(tb[0] * W) - x0), ay = Math.max(0, Math.floor(tb[1] * H) - y0), bx = Math.min(w - 1, Math.ceil(tb[2] * W) - x0), by = Math.min(h - 1, Math.ceil(tb[3] * H) - y0);
+    for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) { const i = y * w + x, j = i * 4; if (Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]) < 60 || (ls != null && Math.abs(L[i] - ls) < 30 && mxx[i] - L[i] > 60)) T[i] = 1; } }
   // élargit un peu (bords adoucis du texte)
-  const g = Math.max(3, Math.round(W / 220)), M = new Uint8Array(N);
+  const g = Math.max(3, Math.round(W / 180)), M = new Uint8Array(N);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (T[y * w + x]) for (let yy = Math.max(0, y - g); yy <= Math.min(h - 1, y + g); yy++) for (let xx = Math.max(0, x - g); xx <= Math.min(w - 1, x + g); xx++) M[yy * w + xx] = 1;
   let cnt = 0; for (let i = 0; i < N; i++) cnt += M[i];
-  if (cnt < 30) return;
+  if (cnt < 30) { // lettres introuvables : on efface tout le cadre du texte
+    const ax = Math.max(0, Math.floor(c.box[0] * W) - x0), ay = Math.max(0, Math.floor(c.box[1] * H) - y0), bx = Math.min(w - 1, Math.ceil(c.box[2] * W) - x0), by = Math.min(h - 1, Math.ceil(c.box[3] * H) - y0);
+    for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) M[y * w + x] = 1;
+  }
   c.mk = { x: x0, y: y0, w, h, W, H, m: M }; c.plans = {}; c.sig = sigOf(c);
   // image noir sur blanc des lettres pour la lecture des mots
   if (placeholder(c) || !c.tl) {
@@ -1276,7 +1278,7 @@ async function prepCaption(ex, c, vid) {
         // mot en couleur ? on compare la couleur des lettres sous le mot
         const ax = Math.max(0, Math.floor((wd.bbox.x0 - 20) / sc)), ay = Math.max(0, Math.floor((wd.bbox.y0 - 20) / sc)), bx = Math.min(w, Math.ceil((wd.bbox.x1 - 20) / sc)), by = Math.min(h, Math.ceil((wd.bbox.y1 - 20) / sc));
         let nc = 0, nh = 0; for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) { const i = y * w + x; if (!fill[i]) continue; const j = i * 4; const dc = Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]), dh = Math.hypot(D[j] - hl[0], D[j + 1] - hl[1], D[j + 2] - hl[2]); if (dh + 20 < dc) nh++; else nc++; }
-        return { t: wd.text.trim(), hl: hasHl(c) && nh > nc };
+        return { t: wd.text.trim(), hl: false };
       })).filter(l => l.length);
       if (lines.length && placeholder(c)) { c.tl = lines; c.text = lines.map(l => l.map(x => x.t).join(" ")).join("\n"); }
     } catch (e) { console.warn("lecture des mots", e); }
@@ -1307,51 +1309,54 @@ let prepT = 0;
 function schedulePrep(ex) { clearTimeout(prepT); prepT = setTimeout(async () => { if (ex.prep) { try { await ex.prep; } catch (e) { } } ex.prep = null; prepEx(ex); }, 900); }
 function invalidatePrep(ex) { if (!ex || !ex.result) return; ex.result.captions.forEach(c => { c.mk = null; c.plans = {}; }); ex.prep = null; ex.prepDone = false; }
 
-/* plan d'effacement : pour chaque pixel du masque, les 4 pixels de décor les plus proches (gauche, droite, haut, bas) */
+/* zone à effacer (masque des lettres) mise à la taille de l'image */
 function planFor(c, W, H) {
   const k = W + "x" + H; c.plans = c.plans || {}; if (c.plans[k]) return c.plans[k];
   const mk = c.mk, sx = W / mk.W, sy = H / mk.H;
-  const x = Math.max(0, Math.floor(mk.x * sx) - 1), y = Math.max(0, Math.floor(mk.y * sy) - 1);
-  const w = Math.min(W - x, Math.ceil(mk.w * sx) + 2), h = Math.min(H - y, Math.ceil(mk.h * sy) + 2), N = w * h;
-  const M = new Uint8Array(N);
+  const x = Math.max(0, Math.floor(mk.x * sx) - 2), y = Math.max(0, Math.floor(mk.y * sy) - 2);
+  const w = Math.min(W - x, Math.ceil(mk.w * sx) + 4), h = Math.min(H - y, Math.ceil(mk.h * sy) + 4), N = w * h;
+  const M = new Uint8Array(N); let n = 0;
   for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
     const ux = Math.floor((x + xx) / sx) - mk.x, uy = Math.floor((y + yy) / sy) - mk.y;
-    if (ux >= 0 && uy >= 0 && ux < mk.w && uy < mk.h && mk.m[uy * mk.w + ux]) M[yy * w + xx] = 1;
+    if (ux >= 0 && uy >= 0 && ux < mk.w && uy < mk.h && mk.m[uy * mk.w + ux]) { M[yy * w + xx] = 1; n++; }
   }
-  const idx = []; for (let i = 0; i < N; i++) if (M[i]) idx.push(i);
-  const n = idx.length, nb = new Int32Array(n * 4), wt = new Float32Array(n * 4);
-  const L = new Int32Array(N).fill(-1), R = new Int32Array(N).fill(-1), U = new Int32Array(N).fill(-1), Dn = new Int32Array(N).fill(-1);
-  for (let yy = 0; yy < h; yy++) { let last = -1; for (let xx = 0; xx < w; xx++) { const i = yy * w + xx; if (!M[i]) last = xx; else L[i] = last; } last = -1; for (let xx = w - 1; xx >= 0; xx--) { const i = yy * w + xx; if (!M[i]) last = xx; else R[i] = last; } }
-  for (let xx = 0; xx < w; xx++) { let last = -1; for (let yy = 0; yy < h; yy++) { const i = yy * w + xx; if (!M[i]) last = yy; else U[i] = last; } last = -1; for (let yy = h - 1; yy >= 0; yy--) { const i = yy * w + xx; if (!M[i]) last = yy; else Dn[i] = last; } }
-  for (let k2 = 0; k2 < n; k2++) {
-    const i = idx[k2], xx = i % w, yy = (i - xx) / w, c4 = [[L[i], 0], [R[i], 0], [U[i], 1], [Dn[i], 1]];
-    let s = 0;
-    c4.forEach(([p, vert], q) => { if (p < 0) { nb[k2 * 4 + q] = i; wt[k2 * 4 + q] = 0; return; } const dist = vert ? Math.abs(p - yy) : Math.abs(p - xx); const ww = 1 / (dist * dist); nb[k2 * 4 + q] = vert ? p * w + xx : yy * w + p; wt[k2 * 4 + q] = ww; s += ww; });
-    for (let q = 0; q < 4; q++) wt[k2 * 4 + q] = s ? wt[k2 * 4 + q] / s : 0;
-  }
-  return (c.plans[k] = { x, y, w, h, idx: Int32Array.from(idx), nb, wt });
+  return (c.plans[k] = { x, y, w, h, M, n });
 }
+/* Efface l'ancien texte : la zone est reconstruite à partir du décor autour, du plus flou au plus net
+   (pyramide « push-pull »), ce qui donne un raccord doux, sans quadrillage. */
 let _ec = null;
 function erase(ctx, c, W, H) {
-  const p = planFor(c, W, H); if (!p.idx.length) return;
-  // on ne lit que la petite zone du texte (rapide), l'image entière reste sur la carte graphique
+  const p = planFor(c, W, H); if (!p.n) return;
   if (!_ec) { const cv = document.createElement("canvas"); _ec = { cv, x: cv.getContext("2d", { willReadFrequently: true }) }; }
   if (_ec.cv.width < p.w || _ec.cv.height < p.h) { _ec.cv.width = Math.max(_ec.cv.width, p.w); _ec.cv.height = Math.max(_ec.cv.height, p.h); }
-  const ex2 = _ec.x; ex2.clearRect(0, 0, p.w, p.h); ex2.drawImage(ctx.canvas, p.x, p.y, p.w, p.h, 0, 0, p.w, p.h);
-  const im = ex2.getImageData(0, 0, p.w, p.h), d = im.data, src = new Uint8ClampedArray(d);
-  for (let k = 0; k < p.idx.length; k++) {
-    const o = p.idx[k] * 4, b = k * 4; let r = 0, g = 0, bl = 0;
-    for (let q = 0; q < 4; q++) { const ww = p.wt[b + q]; if (!ww) continue; const s = p.nb[b + q] * 4; r += src[s] * ww; g += src[s + 1] * ww; bl += src[s + 2] * ww; }
-    d[o] = r; d[o + 1] = g; d[o + 2] = bl;
+  const e2 = _ec.x; e2.clearRect(0, 0, p.w, p.h); e2.drawImage(ctx.canvas, p.x, p.y, p.w, p.h, 0, 0, p.w, p.h);
+  const im = e2.getImageData(0, 0, p.w, p.h), d = im.data;
+  // niveau 0 : couleurs connues (hors texte) avec poids 1, pixels du texte avec poids 0
+  let w = p.w, h = p.h, N = w * h;
+  let R = new Float32Array(N), G = new Float32Array(N), B = new Float32Array(N), Wt = new Float32Array(N);
+  for (let i = 0, j = 0; i < N; i++, j += 4) if (!p.M[i]) { R[i] = d[j]; G[i] = d[j + 1]; B[i] = d[j + 2]; Wt[i] = 1; }
+  const lv = [{ w, h, R, G, B, Wt }];
+  while (w > 1 || h > 1) { // réduction : moyenne pondérée 2×2
+    const w2 = Math.max(1, Math.ceil(w / 2)), h2 = Math.max(1, Math.ceil(h / 2)), n2 = w2 * h2;
+    const R2 = new Float32Array(n2), G2 = new Float32Array(n2), B2 = new Float32Array(n2), W2 = new Float32Array(n2);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, q = (y >> 1) * w2 + (x >> 1), a = Wt[i]; if (!a) continue; R2[q] += R[i] * a; G2[q] += G[i] * a; B2[q] += B[i] * a; W2[q] += a; }
+    for (let q = 0; q < n2; q++) if (W2[q]) { R2[q] /= W2[q]; G2[q] /= W2[q]; B2[q] /= W2[q]; W2[q] = Math.min(1, W2[q]); }
+    w = w2; h = h2; R = R2; G = G2; B = B2; Wt = W2; lv.push({ w, h, R, G, B, Wt });
+    if (w === 1 && h === 1) break;
   }
-  // adoucit la zone effacée (évite le quadrillage) : 2 passes de moyenne sur les pixels effacés seulement
-  const w = p.w, h = p.h;
-  for (let pass = 0; pass < 2; pass++) for (let k = 0; k < p.idx.length; k++) {
-    const i = p.idx[k], x = i % w, y = (i - x) / w; if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) continue;
-    const o = i * 4, a = o - 4, b = o + 4, u = o - w * 4, dn = o + w * 4;
-    for (let ch = 0; ch < 3; ch++) d[o + ch] = (d[o + ch] * 2 + d[a + ch] + d[b + ch] + d[u + ch] + d[dn + ch]) / 6;
+  for (let k = lv.length - 2; k >= 0; k--) { // remontée : on complète chaque niveau avec le niveau plus flou (interpolé)
+    const f = lv[k], cs = lv[k + 1];
+    for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) {
+      const i = y * f.w + x, a = f.Wt[i]; if (a >= 1) continue;
+      const fx = Math.min(cs.w - 1, Math.max(0, (x - 0.5) / 2)), fy = Math.min(cs.h - 1, Math.max(0, (y - 0.5) / 2));
+      const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(cs.w - 1, x0 + 1), y1 = Math.min(cs.h - 1, y0 + 1), tx = fx - x0, ty = fy - y0;
+      const s = (A) => (A[y0 * cs.w + x0] * (1 - tx) + A[y0 * cs.w + x1] * tx) * (1 - ty) + (A[y1 * cs.w + x0] * (1 - tx) + A[y1 * cs.w + x1] * tx) * ty;
+      f.R[i] = f.R[i] * a + s(cs.R) * (1 - a); f.G[i] = f.G[i] * a + s(cs.G) * (1 - a); f.B[i] = f.B[i] * a + s(cs.B) * (1 - a); f.Wt[i] = 1;
+    }
   }
-  ex2.putImageData(im, 0, 0); ctx.drawImage(_ec.cv, 0, 0, p.w, p.h, p.x, p.y, p.w, p.h);
+  const f = lv[0];
+  for (let i = 0, j = 0; i < N; i++, j += 4) if (p.M[i]) { d[j] = f.R[i]; d[j + 1] = f.G[i]; d[j + 2] = f.B[i]; }
+  e2.putImageData(im, 0, 0); ctx.drawImage(_ec.cv, 0, 0, p.w, p.h, p.x, p.y, p.w, p.h);
 }
 /* réécrit le texte : mêmes lignes, même place, même hauteur que l'original */
 function drawText(ctx, c, v, W, H, forced) {
@@ -1362,8 +1367,8 @@ function drawText(ctx, c, v, W, H, forced) {
   const bx = tb.map((q, i) => q * (i % 2 ? H : W));
   const n = lines.length, slotH = (bx[3] - bx[1]) / n;
   const boxes = lb ? lb.map(b => b.map((q, i) => q * (i % 2 ? H : W))) : lines.map((_, i) => [bx[0], bx[1] + i * slotH, bx[2], bx[1] + (i + 1) * slotH]);
-  const hasStroke = !!c.stroke && v.strokeOn !== false;
-  const strokeCol = per.stroke || v.stroke || strokeOf(c);
+  const hasStroke = v.strokeOn != null ? v.strokeOn : !!c.stroke;
+  const strokeCol = per.stroke || v.stroke || (lum(col.fill) > 0.45 ? "#000000" : "#FFFFFF");
   // alignement : bords gauches alignés → à gauche ; droits → à droite ; sinon centré
   const tolA = W * 0.015, lefts = boxes.map(b => b[0]), rights = boxes.map(b => b[2]);
   let align = n > 1 && Math.max(...lefts) - Math.min(...lefts) < tolA && Math.max(...rights) - Math.min(...rights) > tolA * 2 ? "left" : n > 1 && Math.max(...rights) - Math.min(...rights) < tolA && Math.max(...lefts) - Math.min(...lefts) > tolA * 2 ? "right" : "center";
@@ -1389,9 +1394,10 @@ function drawText(ctx, c, v, W, H, forced) {
     const base = (b[1] + b[3]) / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2 + (gh ? 0 : 0);
     let x = align === "left" ? b[0] + size * sw / 2 : align === "right" ? b[2] - tw - size * sw / 2 : (b[0] + b[2]) / 2 - tw / 2;
     if (hasStroke) { ctx.lineWidth = size * sw; ctx.strokeStyle = strokeCol; let xx = x; words.forEach((t, k) => { ctx.strokeText(t, xx, base); xx += ws[k] + sp; }); }
-    let xx = x; words.forEach((t, k) => { ctx.fillStyle = ln[k].hl ? col.hl : col.fill; ctx.fillText(t, xx, base); xx += ws[k] + sp; });
+    let xx = x; words.forEach((t, k) => { ctx.fillStyle = col.fill; ctx.fillText(t, xx, base); xx += ws[k] + sp; });
   });
 }
+function ensureFont(v) { if (v && !fontOf(v.font)) { const pool = fontPool(); v.font = pool[Math.floor(Math.random() * pool.length)].n; loadFont(v.font); } }
 function fontActive(v, c) { return !!(v && v.font && fontOf(v.font) && c.mk && c.tl && c.tl.length); }
 /* même taille pour les lignes qui avaient la même hauteur dans l'original (ex. une liste 1. 2. 3.) */
 function harmonized(ctx, ex, v, W, H) {
@@ -1426,12 +1432,10 @@ const recolorOnly = (ex, v) => v && v.font ? ex.result.captions.filter(c => !fon
 function allColors() { return [...(S.settings.custom || []).map(h => ({ n: "Perso " + h, fill: h, hl: "#FFFFFF", custom: true })), ...PAL]; }
 function fontPool() { const off = S.settings.fontsOff || []; const p = FONTS.filter(f => !off.includes(f.n)); return p.length ? p : FONTS; }
 function renderFonts() {
-  $("#optFont").checked = S.settings.fontOn !== false; $("#fontBox").style.opacity = S.settings.fontOn !== false ? "1" : ".45";
   const off = S.settings.fontsOff || [];
   $("#fontPal").innerHTML = FONTS.map((f, i) => `<button class="pchip ${off.includes(f.n) ? "off" : ""}" data-font="${i}" type="button" aria-pressed="${!off.includes(f.n)}" style="font-family:'${f.n}';font-weight:${f.w}">${esc(f.n)}</button>`).join("");
 }
 $("#fontPal").addEventListener("click", e => { const b = e.target.closest("[data-font]"); if (!b) return; const n = FONTS[+b.dataset.font].n; const off = S.settings.fontsOff = S.settings.fontsOff || []; const i = off.indexOf(n); if (i >= 0) off.splice(i, 1); else if (off.length < FONTS.length - 1) off.push(n); saveSettings(); renderFonts(); });
-$("#optFont").onchange = e => { S.settings.fontOn = e.target.checked; saveSettings(); renderFonts(); };
 $("#addCol").onclick = () => { const h = $("#customCol").value.toUpperCase(); S.settings.custom = S.settings.custom || []; if (!S.settings.custom.includes(h)) S.settings.custom.unshift(h); saveSettings(); renderPalette(); toast("Couleur ajoutée : elle sera utilisée en premier."); };
 function renderPalette() {
   renderFonts();
@@ -1454,7 +1458,7 @@ function makeVariant(ex) {
   ex.k = ex.k || 0;
   const used = new Set(S.variants.filter(v => v.exId === ex.id).map(v => v.fill));
   let col; do { col = colorForIndex(ex, ex.k++); } while (used.has(col.fill) && ex.k < 400);
-  let font = null; if (S.settings.fontOn !== false) { const pool = fontPool(); font = pool[(S.fontK = (S.fontK || 0) + 1) % pool.length].n; loadFont(font); }
+  const pool = fontPool(), font = pool[(S.fontK = (S.fontK || 0) + 1) % pool.length].n; loadFont(font);
   return { id: uid(), auto: true, n: ++S.counter, exId: ex.id, srcName: ex.name, fill: col.fill, hl: col.hl, colName: col.n, per: {}, font };
 }
 function nextColor(v) {
@@ -1505,8 +1509,7 @@ const thumbCanvas = $("#thumbGL"); let RT = null; try { RT = makeRenderer(thumbC
 function drawThumb(v) {
   const cv = document.querySelector(`.vcard[data-id="${v.id}"] canvas`); const ex = exById(v.exId); if (!cv || !ex || !ex.still || !RT) return;
   thumbCanvas.width = ex.still.width; thumbCanvas.height = ex.still.height;
-  if (v.font) { if (!fontLoaded[v.font]) loadFont(v.font); const tc = document.createElement("canvas"); tc.width = ex.still.width; tc.height = ex.still.height; const tx = tc.getContext("2d"); composeFont(tx, ex.still, tc.width, tc.height, ex, v, ex.stillT); RT.draw(tc, recolorItems(ex, v, ex.stillT)); }
-  else RT.draw(ex.still, recolorItems(ex, v, ex.stillT));
+  ensureFont(v); { if (!fontLoaded[v.font]) loadFont(v.font); const tc = document.createElement("canvas"); tc.width = ex.still.width; tc.height = ex.still.height; const tx = tc.getContext("2d"); composeFont(tx, ex.still, tc.width, tc.height, ex, v, ex.stillT); RT.draw(tc, recolorItems(ex, v, ex.stillT)); }
   cv.width = ex.still.width; cv.height = ex.still.height; cv.getContext("2d").drawImage(thumbCanvas, 0, 0);
 }
 function chipsHtml(v) { const f = fontOf(v.font); return `<span class="chip"><i style="background:${v.fill}"></i>${esc(v.colName || "Personnalisée")}</span>${f ? `<span class="chip" style="font-family:'${f.n}';font-weight:${f.w}">${esc(f.n)}</span>` : ""}${v.auto === false ? `<span class="chip">Retouchée</span>` : ""}`; }
@@ -1578,10 +1581,12 @@ async function renderVideo(v, onProg, slot = 0) {
   const vid = document.createElement("video"); vid.playsInline = true; vid.preload = "auto"; vid.src = ex.url; await once(vid, "loadeddata");
   const W = vid.videoWidth, H = vid.videoHeight, srcDur = vid.duration;
   const { cv, r, release } = exportRenderer(W, H);
-  let cc = null;
-  if (v.font) { await prepEx(ex); await loadFont(v.font); const c2 = document.createElement("canvas"); c2.width = W; c2.height = H; cc = { cv: c2, ctx: c2.getContext("2d", { alpha: false }) }; }
-  // tous les textes réécrits → on enregistre directement le canvas 2D (pas de passage WebGL à chaque image)
-  const pure2D = !!cc && ex.result.captions.every(c => fontActive(v, c));
+  ensureFont(v); await prepEx(ex); await loadFont(v.font);
+  const miss = ex.result.captions.findIndex(c => !fontActive(v, c));
+  if (miss >= 0) { release(); vid.removeAttribute("src"); vid.load(); throw new Error(`Le texte n°${miss + 1} n’a pas pu être lu : écris-le dans le Studio (variante 1), puis relance.`); }
+  const c2 = document.createElement("canvas"); c2.width = W; c2.height = H; const cc = { cv: c2, ctx: c2.getContext("2d", { alpha: false }) };
+  // seule la zone du texte est modifiée ; le reste de l'image est la vidéo d'origine
+  const pure2D = true;
   const draw = t => { if (cc) { composeFont(cc.ctx, vid, W, H, ex, v, t); if (!pure2D) r.draw(cc.cv, recolorItems(ex, v, t)); } else r.draw(vid, recolorItems(ex, v, t)); };
   draw(0);
   // « Comme la source » : une image enregistrée pour chaque image de la vidéo d'origine (même cadence).
