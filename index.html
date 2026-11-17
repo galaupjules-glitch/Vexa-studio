@@ -345,7 +345,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-17 b (texte enregistré)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-17 c (tout texte)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -623,7 +623,7 @@ function drawBoxes(ex, t) {
   const W = overlay.width, H = overlay.height, lw = Math.max(2, W / 360);
   for (const c of ex.result.captions) {
     const on = t >= c.start - PAD_T && t <= c.end + PAD_T; if (!on && S.selCap !== c.id) continue;
-    const sel = S.selCap === c.id;
+    const sel = S.selCap === c.id; if (c.skip && !sel) continue;
     const x = c.box[0] * W, y = c.box[1] * H, w = (c.box[2] - c.box[0]) * W, h = (c.box[3] - c.box[1]) * H;
     octx.setLineDash(sel ? [] : [W / 80, W / 120]); octx.lineWidth = lw;
     octx.strokeStyle = sel ? "#FFD23F" : on ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.35)";
@@ -714,7 +714,7 @@ function renderEditor() {
       <div class="row" style="justify-content:space-between"><span class="hint">${caps.length} texte${caps.length > 1 ? "s" : ""} repéré${caps.length > 1 ? "s" : ""}</span><button class="btn sm" id="btnAddZone" type="button">+ Zone de texte au temps actuel</button></div>
       <div class="caps">${caps.map((c, i) => `
         <div class="cap ${S.selCap === c.id ? "sel" : ""}" data-id="${c.id}">
-          <div class="hint" style="margin:0 0 4px">${c.tl && c.tl.length ? (c.byGemini ? "✓ Texte enregistré (lu par Gemini)" : c.userText ? "✓ Texte enregistré (corrigé par toi)" : "✓ Texte enregistré — vérifie les mots") : (exOf(current()) && exOf(current()).prepBusy ? "Lecture du texte…" : "⚠ Écris le texte exact ici")}</div>
+          <div class="hint" style="margin:0 0 4px">${c.skip ? "⊘ Ignoré : aucun texte lisible ici (pas un texte ajouté). Écris un texte pour le garder." : c.tl && c.tl.length ? (c.byGemini ? "✓ Texte enregistré (lu par Gemini)" : c.userText ? "✓ Texte enregistré (corrigé par toi)" : "✓ Texte enregistré — vérifie les mots") : (exOf(current()) && exOf(current()).prepBusy ? "Lecture du texte…" : "⚠ Écris le texte exact ici")}</div>
           <textarea class="cap-text" id="t-${c.id}" data-f="text" rows="${Math.max(1, String(c.text).split("\n").length)}" aria-label="Texte ${i + 1}" placeholder="Écris le texte exact (une ligne par ligne de la vidéo)">${esc(c.text)}</textarea>
           <div class="cap-line">
             <span class="cap-n">#${i + 1}</span>
@@ -776,7 +776,7 @@ $("#editor").addEventListener("input", e => {
   if (t.dataset.vf) { it.per = it.per || {}; it.per[c.id] = Object.assign({}, it.per[c.id], { [t.dataset.vf]: t.value.toUpperCase() }); variantChanged(it); return; }
   const f = t.dataset.f; if (!f) return;
   c[f] = ["start", "end"].includes(f) ? (+t.value || 0) : f === "text" ? t.value : t.value.toUpperCase();
-  if (f === "text") { c.userText = true; c.tl = textLines(t.value, c.tl); exChanged(ex, true); S.variants.filter(v => v.exId === ex.id).forEach(v => { v.blob = null; }); return; }
+  if (f === "text") { c.userText = true; c.skip = !t.value.trim(); c.tl = textLines(t.value, c.tl); exChanged(ex, true); S.variants.filter(v => v.exId === ex.id).forEach(v => { v.blob = null; }); return; }
   exChanged(ex);
 });
 $("#editor").addEventListener("change", e => { if (["exTest", "vFont", "vStrokeOn"].includes(e.target.id)) return; if (["start", "end"].includes(e.target.dataset.f)) renderEditor(); });
@@ -813,12 +813,13 @@ function variantChanged(v) { v.auto = false; v.blob = null; setStatus(v, ""); se
 /* ---------- drop folder ---------- */
 let sampleNS = null, sampleReady = false, downloadsNS = null;
 const clipMeta = d => d.url ? `${d.w}×${d.h} · ${fmt(d.dur)} · ${fmtSize(d.size)}` : "vidéo à redéposer";
+const nCap = ex => ex.result.captions.filter(c => !c.skip).length;
 function exStatusText(ex) {
   return ({
     missing: "Redépose cette vidéo pour la retrouver (projet ouvert).",
     queued: "En attente de lecture…",
     reading: ex.msg || "Repérage du texte…",
-    done: ex.result ? `✓ ${ex.result.captions.length} texte${ex.result.captions.length > 1 ? "s" : ""} repéré${ex.result.captions.length > 1 ? "s" : ""} · ${S.variants.filter(v => v.exId === ex.id).length} variante(s) 2${ex.prepBusy && ex.prepMsg ? " · " + ex.prepMsg : ""}` : "",
+    done: ex.result ? `✓ ${nCap(ex)} texte${nCap(ex) > 1 ? "s" : ""} enregistré${nCap(ex) > 1 ? "s" : ""} · ${S.variants.filter(v => v.exId === ex.id).length} variante(s) 2${ex.prepBusy && ex.prepMsg ? " · " + ex.prepMsg : ""}` : "",
     error: ex.msg || "La lecture a échoué.",
     manual: "Lecture automatique indisponible : colle ta clé Gemini (AI Studio) dans ⚙ Réglages → « Clé Gemini »."
   })[ex.status] || "";
@@ -959,8 +960,9 @@ async function localDetect(url, D, onMsg) {
   const masks = f => {
     if (f.F) return f;
     const mn = filt(f.L, 2, false), mx = filt(f.L, 2, true), F = new Uint8Array(N), S = new Uint8Array(N);
-    for (let i = 0; i < N; i++) { const l = f.L[i]; if (l >= 105 && l - mn[i] >= 85 && mn[i] <= 90) F[i] = 1; else if (l <= 75 && mx[i] - l >= 85) S[i] = 1; }
-    f.F = F; f.S = S; return f;
+    const C = new Uint8Array(N); // bord net, quelle que soit la couleur (texte clair, foncé ou coloré)
+    for (let i = 0; i < N; i++) { const l = f.L[i]; if (l >= 105 && l - mn[i] >= 85 && mn[i] <= 90) F[i] = 1; else if (l <= 75 && mx[i] - l >= 85) S[i] = 1; if (mx[i] - mn[i] >= 70) C[i] = 1; }
+    f.F = F; f.S = S; f.C = C; return f;
   };
   // 1) images régulières
   const step = D <= 8 ? 0.33 : D <= 20 ? 0.5 : 0.8;
@@ -968,11 +970,14 @@ async function localDetect(url, D, onMsg) {
   if (times.length < 2) times.push(Math.max(0, D - 0.05));
   const frames = [];
   for (let i = 0; i < times.length; i++) { if (onMsg) onMsg(`Repérage du texte… ${Math.round(100 * i / times.length)} %`); frames.push(masks(await grab(times[i]))); }
+  // deux méthodes : « lettres claires + contour foncé » et « bords nets de toute couleur » ; on garde ensuite le cadre lisible
+  const runMode = async mode => {
+  const edge = mode === "c" ? (f, i) => f.C[i] : (f, i) => f.F[i] || f.S[i];
   // 2) pixels de texte = lettres/contour immobiles par rapport à une image voisine
   const lineBoxes = frames.map((f, k) => {
     const T = new Uint8Array(N), nb = [frames[k - 1], frames[k + 1]].filter(Boolean);
     const textAt = () => false;
-    for (let i = 0; i < N; i++) if (f.F[i] || f.S[i]) { let ok = 0; for (const g of nb) if (Math.abs(g.L[i] - f.L[i]) <= 12 && (g.F[i] || g.S[i])) ok++; if (ok === nb.length || (ok && nb.length === 2 && !textAt(nb, i))) T[i] = 1; }
+    for (let i = 0; i < N; i++) if (edge(f, i)) { let ok = 0; for (const g of nb) if (Math.abs(g.L[i] - f.L[i]) <= 12 && edge(g, i)) ok++; if (ok === nb.length || (ok && nb.length === 2 && !textAt(nb, i))) T[i] = 1; }
     if (!nb.length) T.set(f.F);
     // dilatation (relie les lettres d'une même ligne)
     const rx = 5, ry = 0, Dm = new Uint8Array(N), tmp = new Uint8Array(N);
@@ -990,7 +995,7 @@ async function localDetect(url, D, onMsg) {
       if (y0 < H * 0.04 || y1 > H * 0.97) continue; // barre d'état / bord
       // signature « texte » : beaucoup d'alternances clair/sombre par ligne, densité moyenne
       let trans = 0, rows = 0, fc = 0;
-      for (let y = y0; y <= y1; y++) { let prev = 0, tr = 0, any = 0; for (let x = x0; x <= x1; x++) { const q = f.F[y * W + x] && T[y * W + x]; if (q) { fc++; any = 1; } if (q && !prev) tr++; prev = q; } if (any) { rows++; trans += tr; } }
+      for (let y = y0; y <= y1; y++) { let prev = 0, tr = 0, any = 0; for (let x = x0; x <= x1; x++) { const q = T[y * W + x]; if (q) { fc++; any = 1; } if (q && !prev) tr++; prev = q; } if (any) { rows++; trans += tr; } }
       const dens = fc / (w * h);
       if (rows < h * 0.3 || trans / Math.max(1, rows) < 3 || dens < 0.06 || dens > 0.75 || fc < 25) continue;
       out.push([x0, y0, x1, y1]);
@@ -1029,8 +1034,9 @@ async function localDetect(url, D, onMsg) {
     const sig = [];
     const others = [...new Set([g.first, g.last, g.first + 1, g.last - 1])].filter(k => k !== g.mid && k >= g.first && k <= g.last).map(k => frames[k]);
     const steady = i => others.every(o => Math.abs(o.L[i] - f.L[i]) <= 10);
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const i = y * W + x, j = i * 4; if (f.F[i]) { sig.push(i); if (steady(i)) fill.push([f.d[j], f.d[j + 1], f.d[j + 2], f.L[i]]); } else if (f.S[i] && steady(i)) strk.push([f.d[j], f.d[j + 1], f.d[j + 2]]); }
-    if (sig.length < 20 || fill.length < 10) continue;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const i = y * W + x, j = i * 4; if (edge(f, i)) sig.push(i); if (f.F[i]) { if (steady(i)) fill.push([f.d[j], f.d[j + 1], f.d[j + 2], f.L[i]]); } else if (f.S[i] && steady(i)) strk.push([f.d[j], f.d[j + 1], f.d[j + 2]]); }
+    if (sig.length < 20) continue;
+    if (fill.length < 10) for (const i of sig) { const j = i * 4; fill.push([f.d[j], f.d[j + 1], f.d[j + 2], f.L[i]]); }
     const sat = p => { const mx = Math.max(...p), mn = Math.min(...p); return mx ? (mx - mn) / mx : 0; };
     // lettres « pleines » seulement (pas les bords adoucis), puis 2 groupes : couleur principale / mot en couleur
     const mxOf = p => Math.max(p[0], p[1], p[2]); const Ls = fill.map(mxOf).sort((a, b) => a - b), lTop = Ls[Math.floor(Ls.length * 0.95)] || 255; const core = fill.filter(p => mxOf(p) >= lTop * 0.8).map(p => p.slice(0, 3)); const px = core.length >= 20 ? core : fill;
@@ -1040,7 +1046,7 @@ async function localDetect(url, D, onMsg) {
     for (let it = 0; it < 6; it++) { const A = [], B = []; for (const p of px) (dist(p, c1) <= dist(p, c2) ? A : B).push(p); if (!A.length || !B.length) break; c1 = median(A); c2 = median(B); if (it === 5 && dist(c1, c2) > 90 && B.length > px.length * 0.15 && A.length > px.length * 0.15) [main, hl] = A.length >= B.length ? [c1, c2] : [c2, c1]; }
     const stroke = strk.length > fill.length * 0.25 ? median(strk) : null;
     // présence du sous-titre à l'instant t : ses pixels de lettres sont toujours là
-    const present = fr => { masks(fr); let ok = 0; for (const i of sig) if (fr.F[i] && Math.abs(fr.L[i] - f.L[i]) <= 30) ok++; return ok / sig.length > 0.55; };
+    const present = fr => { masks(fr); let ok = 0; for (const i of sig) if (edge(fr, i) && Math.abs(fr.L[i] - f.L[i]) <= 30) ok++; return ok / sig.length > 0.55; };
     const refine = async (tIn, tOut) => { for (let it = 0; it < 4; it++) { const tm = (tIn + tOut) / 2; if (present(await grab(tm))) tIn = tm; else tOut = tm; } return (tIn + tOut) / 2; };
     if (onMsg) onMsg("Ajustement du début et de la fin…");
     const start = g.first === 0 ? 0 : await refine(times[g.first], times[g.first - 1]);
@@ -1053,6 +1059,9 @@ async function localDetect(url, D, onMsg) {
       lines: g.lines.sort((a, b) => a[1] - b[1]).map(b => [Math.max(0, b[0] - 1) / W, Math.max(0, b[1] - 1) / H, Math.min(W, b[2] + 2) / W, Math.min(H, b[3] + 2) / H])
     });
   }
+  return caps;
+  };
+  const caps = [...await runMode("fs"), ...(await runMode("c")).map(c => ({ ...c, alt: true }))];
   v.removeAttribute("src"); v.load();
   caps.sort((a, b) => a.start - b.start || a.box[1] - b.box[1]);
   caps.forEach((c, i) => c.text = `Texte ${i + 1}`);
@@ -1173,121 +1182,90 @@ const placeholder = c => !c.text || /^Texte \d+$|^Nouveau texte$/.test(c.text.tr
    Pixels clairs bordés de sombre (ou l'inverse) et identiques sur plusieurs images du texte. */
 async function prepCaption(ex, c, vid) {
   const W = vid.videoWidth, H = vid.videoHeight;
-  const mx = Math.round(W * 0.02), my = Math.round(H * 0.01);
+  const mx = Math.round(W * 0.03), my = Math.round(H * 0.015);
   const x0 = Math.max(0, Math.floor(c.box[0] * W) - mx), y0 = Math.max(0, Math.floor(c.box[1] * H) - my);
   const x1 = Math.min(W, Math.ceil(c.box[2] * W) + mx), y1 = Math.min(H, Math.ceil(c.box[3] * H) + my);
   const w = x1 - x0, h = y1 - y0, N = w * h; if (w < 4 || h < 4) return;
   const cv = document.createElement("canvas"); cv.width = w; cv.height = h; const cx = cv.getContext("2d", { willReadFrequently: true });
-  const d = c.end - c.start, ts = d > 0.6 ? [c.start + d * 0.15, c.start + d * 0.5, c.end - d * 0.15] : [c.start + d * 0.5];
+  // plusieurs images pendant que le texte est affiché : le texte est immobile, le décor bouge
+  const d = Math.max(0, c.end - c.start), K = d > 1.2 ? 5 : d > 0.6 ? 3 : 1;
+  const ts = K === 1 ? [c.start + d / 2] : Array.from({ length: K }, (_, k) => c.start + d * (0.08 + 0.84 * k / (K - 1)));
   const fr = [];
   for (const t of ts) { vid.currentTime = clamp(t, 0, vid.duration - 0.04); await once(vid, "seeked"); cx.drawImage(vid, x0, y0, w, h, 0, 0, w, h); fr.push(cx.getImageData(0, 0, w, h).data); }
-  const r = Math.max(2, Math.round(W / 360));
-  const lumOf = D => { const L = new Uint8Array(N); for (let i = 0, j = 0; i < N; i++, j += 4) L[i] = (D[j] * 77 + D[j + 1] * 150 + D[j + 2] * 29) >> 8; return L; };
-  const Ls = fr.map(lumOf), L = Ls[Math.floor(Ls.length / 2)], D = fr[Math.floor(fr.length / 2)];
-  const filt = (A, isMax) => { const a = new Uint8Array(N), b = new Uint8Array(N);
-    for (let y = 0; y < h; y++) { const o = y * w; for (let x = 0; x < w; x++) { let m = A[o + x]; for (let k = Math.max(0, x - r), e = Math.min(w - 1, x + r); k <= e; k++) { const q = A[o + k]; if (isMax ? q > m : q < m) m = q; } a[o + x] = m; } }
-    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) { let m = a[y * w + x]; for (let k = Math.max(0, y - r), e = Math.min(h - 1, y + r); k <= e; k++) { const q = a[k * w + x]; if (isMax ? q > m : q < m) m = q; } b[y * w + x] = m; }
-    return b; };
-  const mn = filt(L, false), mxx = filt(L, true);
-  const lf = lum(c.color) * 255, ls = c.stroke ? lum(c.stroke) * 255 : null;
-  const fill = new Uint8Array(N), T = new Uint8Array(N);
-  for (let i = 0; i < N; i++) {
-    const l = L[i], steady = Ls.every(o => Math.abs(o[i] - l) <= 22);
-    if (!steady && Ls.length > 1) continue;
-    const isF = l - mn[i] >= 70 && Math.abs(l - lf) < 90, isS = ls != null ? (mxx[i] - l >= 70 && Math.abs(l - ls) < 70) : false;
-    if (isF) fill[i] = 1; if (isF || isS) T[i] = 1;
-  }
-  // couleurs proches de la couleur du texte (lettres sans contour net)
-  const col = rgb(c.color).map(v => v * 255), hl = rgb(c.hl).map(v => v * 255);
-  for (let i = 0, j = 0; i < N; i++, j += 4) if (!T[i] && (Ls.length < 2 || Ls.every(o => Math.abs(o[i] - L[i]) <= 22))) {
-    const dc = Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]), dh = Math.hypot(D[j] - hl[0], D[j + 1] - hl[1], D[j + 2] - hl[2]);
-    if (Math.min(dc, dh) < 40 && mxx[i] - mn[i] > 60) { T[i] = 1; fill[i] = 1; }
-  }
-  // on ne garde que l'intérieur du cadre du texte (+ marge du contour)
-  const bx0 = Math.round(c.box[0] * W) - x0 - r, by0 = Math.round(c.box[1] * H) - y0 - r, bx1 = Math.round(c.box[2] * W) - x0 + r, by1 = Math.round(c.box[3] * H) - y0 + r;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < bx0 || x > bx1 || y < by0 || y > by1) { T[y * w + x] = 0; fill[y * w + x] = 0; }
-  // cadre exact des lettres (contour compris) pour chaque ligne
-  c.tight = (c.lines && c.lines.length ? c.lines : [c.box]).map(lb => {
-    const ax = Math.max(0, Math.floor(lb[0] * W) - x0 - r), ay = Math.max(0, Math.floor(lb[1] * H) - y0), bx = Math.min(w - 1, Math.ceil(lb[2] * W) - x0 + r), by = Math.min(h - 1, Math.ceil(lb[3] * H) - y0);
-    // lignes de pixels : on garde la plus grande bande continue (ignore le bas d'une ligne voisine)
+  const D = fr[Math.floor(fr.length / 2)];
+  // pixels immobiles (quelle que soit leur couleur : texte clair, foncé, coloré, avec ou sans contour)
+  const steady = new Uint8Array(N);
+  for (let i = 0, j = 0; i < N; i++, j += 4) { let dev = 0; for (const f of fr) { const q = Math.max(Math.abs(f[j] - D[j]), Math.abs(f[j + 1] - D[j + 1]), Math.abs(f[j + 2] - D[j + 2])); if (q > dev) dev = q; } steady[i] = dev <= 30 ? 1 : 0; }
+  // seulement dans les lignes de texte repérées
+  const lbs = (c.lines && c.lines.length ? c.lines : [c.box]).map(lb => [Math.max(0, Math.floor(lb[0] * W) - x0), Math.max(0, Math.floor(lb[1] * H) - y0), Math.min(w - 1, Math.ceil(lb[2] * W) - x0), Math.min(h - 1, Math.ceil(lb[3] * H) - y0)]);
+  const T = new Uint8Array(N), m2 = Math.round(W / 150);
+  for (const [ax, ay, bx, by] of lbs) for (let y = Math.max(0, ay - m2); y <= Math.min(h - 1, by + m2); y++) for (let x = Math.max(0, ax - m2); x <= Math.min(w - 1, bx + m2); x++) { const i = y * w + x; if (K === 1 || steady[i]) T[i] = 1; }
+  // cadre exact de chaque ligne (bande continue la plus haute, bouts isolés retirés)
+  c.tight = lbs.map(([ax, ay, bx, by]) => {
+    ay = Math.max(0, ay - m2); by = Math.min(h - 1, by + m2); ax = Math.max(0, ax - m2); bx = Math.min(w - 1, bx + m2);
     const rowN = []; for (let y = ay; y <= by; y++) { let n = 0; for (let x = ax; x <= bx; x++) n += T[y * w + x]; rowN.push(n); }
-    const thr = Math.max(3, (bx - ax) * 0.01); let best = null, cur = null, gap = 0;
+    const thr = Math.max(3, (bx - ax) * 0.02); let best = null, cur = null, gap = 0;
     rowN.forEach((n, k) => { if (n > thr) { if (!cur) cur = [k, k]; cur[1] = k; gap = 0; } else if (cur && ++gap > 2) { if (!best || cur[1] - cur[0] > best[1] - best[0]) best = cur; cur = null; gap = 0; } });
     if (cur && (!best || cur[1] - cur[0] > best[1] - best[0])) best = cur;
-    if (!best) return lb;
+    if (!best) return [(ax + x0) / W, (ay + y0) / H, (bx + 1 + x0) / W, (by + 1 + y0) / H];
     const ty0 = ay + best[0], ty1 = ay + best[1];
-    // colonnes : on retire les pixels isolés aux deux bouts (0,5 % des pixels de chaque côté)
     const colN = new Int32Array(bx - ax + 1); let tot = 0; for (let y = ty0; y <= ty1; y++) for (let x = ax; x <= bx; x++) if (T[y * w + x]) { colN[x - ax]++; tot++; }
-    let acc = 0, tx0 = ax, tx1 = bx; for (let k = 0; k < colN.length; k++) { acc += colN[k]; if (acc > tot * 0.005) { tx0 = ax + k; break; } }
-    acc = 0; for (let k = colN.length - 1; k >= 0; k--) { acc += colN[k]; if (acc > tot * 0.005) { tx1 = ax + k; break; } }
+    let acc = 0, tx0 = ax, tx1 = bx; for (let k = 0; k < colN.length; k++) { acc += colN[k]; if (acc > tot * 0.01) { tx0 = ax + k; break; } }
+    acc = 0; for (let k = colN.length - 1; k >= 0; k--) { acc += colN[k]; if (acc > tot * 0.01) { tx1 = ax + k; break; } }
     return [(tx0 + x0) / W, (ty0 + y0) / H, (tx1 + 1 + x0) / W, (ty1 + 1 + y0) / H];
   });
-  // ajoute les pixels de la couleur de l'ancien texte dans le cadre exact (bords colorés, sans test d'immobilité)
-  for (const tb of c.tight) { const ax = Math.max(0, Math.floor(tb[0] * W) - x0), ay = Math.max(0, Math.floor(tb[1] * H) - y0), bx = Math.min(w - 1, Math.ceil(tb[2] * W) - x0), by = Math.min(h - 1, Math.ceil(tb[3] * H) - y0);
-    for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) { const i = y * w + x, j = i * 4; if (Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]) < 60 || (ls != null && Math.abs(L[i] - ls) < 30 && mxx[i] - L[i] > 60)) T[i] = 1; } }
-  // élargit un peu (bords adoucis du texte)
-  const g = Math.max(3, Math.round(W / 180)), M = new Uint8Array(N);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (T[y * w + x]) for (let yy = Math.max(0, y - g); yy <= Math.min(h - 1, y + g); yy++) for (let xx = Math.max(0, x - g); xx <= Math.min(w - 1, x + g); xx++) M[yy * w + xx] = 1;
-  let cnt = 0; for (let i = 0; i < N; i++) cnt += M[i];
-  if (cnt < 30) { // lettres introuvables : on efface tout le cadre du texte
-    const ax = Math.max(0, Math.floor(c.box[0] * W) - x0), ay = Math.max(0, Math.floor(c.box[1] * H) - y0), bx = Math.min(w - 1, Math.ceil(c.box[2] * W) - x0), by = Math.min(h - 1, Math.ceil(c.box[3] * H) - y0);
-    for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) M[y * w + x] = 1;
+  const tbs = c.tight.map(b => [Math.floor(b[0] * W) - x0, Math.floor(b[1] * H) - y0, Math.ceil(b[2] * W) - x0, Math.ceil(b[3] * H) - y0]);
+  const inTight = (x, y) => tbs.some(([a, b, cc2, dd]) => x >= a && x < cc2 && y >= b && y < dd);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (T[y * w + x] && !inTight(x, y)) T[y * w + x] = 0;
+  // caméra fixe : tout est immobile → on efface tout le cadre du texte
+  let area = 0, st = 0; for (const [a, b, cc2, dd] of tbs) for (let y = b; y < dd; y++) for (let x = a; x < cc2; x++) { area++; st += T[y * w + x]; }
+  const fixedCam = K > 1 && area && st / area > 0.8;
+  // couleurs du texte : 2 groupes ; le contour est le groupe le plus au bord des lettres
+  const px = []; for (let i = 0; i < N; i++) if (T[i]) px.push(i);
+  if (px.length > 20 && !fixedCam) {
+    const col = i => [D[i * 4], D[i * 4 + 1], D[i * 4 + 2]], dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    let A = col(px[0]), B = px.map(col).reduce((m, p) => dist(p, A) > dist(m, A) ? p : m, A), ga = [], gb = [];
+    for (let it = 0; it < 6; it++) { ga = []; gb = []; for (const i of px) (dist(col(i), A) <= dist(col(i), B) ? ga : gb).push(i); const mean = g => g.length ? [0, 1, 2].map(k => g.reduce((s, i) => s + D[i * 4 + k], 0) / g.length) : A; A = mean(ga); B = mean(gb); }
+    const edge = g => g.length ? g.filter(i => { const x = i % w; return !T[i - 1] || !T[i + 1] || !T[i - w] || !T[i + w] || x === 0; }).length / g.length : 1;
+    const hx = a => "#" + a.map(v => Math.round(v).toString(16).padStart(2, "0")).join("").toUpperCase();
+    if (dist(A, B) > 70 && ga.length > px.length * 0.15 && gb.length > px.length * 0.15) {
+      const [fillC, strokeC, fillG] = edge(ga) <= edge(gb) ? [A, B, ga] : [B, A, gb];
+      c.color = hx(fillC); c.stroke = hx(strokeC); c.hl = c.color; c._fillSet = new Set(fillG);
+    } else { c.color = hx(A); c.hl = c.color; c._fillSet = null; }
   }
+  // zone à effacer : lettres + contour, un peu élargie (bords adoucis) ; caméra fixe → tout le cadre
+  const g = Math.max(3, Math.round(W / 180)), M = new Uint8Array(N);
+  if (fixedCam) { for (const [a, b, cc2, dd] of tbs) for (let y = Math.max(0, b - g); y < Math.min(h, dd + g); y++) for (let x = Math.max(0, a - g); x < Math.min(w, cc2 + g); x++) M[y * w + x] = 1; }
+  else for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (T[y * w + x]) for (let yy = Math.max(0, y - g); yy <= Math.min(h - 1, y + g); yy++) { const o = yy * w; for (let xx = Math.max(0, x - g); xx <= Math.min(w - 1, x + g); xx++) M[o + xx] = 1; }
+  let cnt = 0; for (let i = 0; i < N; i++) cnt += M[i];
+  if (cnt < 30) for (const [a, b, cc2, dd] of tbs) for (let y = Math.max(0, b); y < Math.min(h, dd); y++) for (let x = Math.max(0, a); x < Math.min(w, cc2); x++) M[y * w + x] = 1;
   c.mk = { x: x0, y: y0, w, h, W, H, m: M }; c.plans = {}; c.sig = sigOf(c);
   { const cc = document.createElement("canvas"); cc.width = w; cc.height = h; const im3 = cc.getContext("2d").createImageData(w, h); im3.data.set(D); cc.getContext("2d").putImageData(im3, 0, 0); c._crop = cc; }
-  // image noir sur blanc des lettres pour la lecture des mots
+  // lecture locale des mots (secours si pas de Gemini) : préparée ici, lancée par prepEx seulement si besoin
+  c._ocr = async () => {
   if (placeholder(c) || !c.tl) {
-    const sc = clamp(64 / Math.max(8, (c.box[3] - c.box[1]) * H / Math.max(1, (c.lines || [c.box]).length)), 1, 3);
-    const oc = document.createElement("canvas"); oc.width = Math.round(w * sc) + 40; oc.height = Math.round(h * sc) + 40;
-    const ox = oc.getContext("2d"); ox.fillStyle = "#fff"; ox.fillRect(0, 0, oc.width, oc.height);
-    const bw = document.createElement("canvas"); bw.width = w; bw.height = h; const bctx = bw.getContext("2d"); const im = bctx.createImageData(w, h);
-    // lettres seulement : pixels clairs encadrés par le contour (à gauche et à droite, ou en haut et en bas)
-    const inner = new Uint8Array(N);
-    if (ls != null) {
-      const isS = i => (T[i] && !fill[i]) || (mxx[i] - L[i] >= 70 && Math.abs(L[i] - ls) < 70), lh0 = (c.box[3] - c.box[1]) * H / Math.max(1, (c.lines || [c.box]).length), dmax = Math.max(4, Math.round(lh0 * 0.14));
-      const lft = new Int32Array(N).fill(1e6), rgt = new Int32Array(N).fill(1e6), up = new Int32Array(N).fill(1e6), dn = new Int32Array(N).fill(1e6);
-      for (let y = 0; y < h; y++) { let l = -1e6; for (let x = 0; x < w; x++) { const i = y * w + x; if (isS(i)) l = x; lft[i] = x - l; } l = 1e6; for (let x = w - 1; x >= 0; x--) { const i = y * w + x; if (isS(i)) l = x; rgt[i] = l - x; } }
-      for (let x = 0; x < w; x++) { let l = -1e6; for (let y = 0; y < h; y++) { const i = y * w + x; if (isS(i)) l = y; up[i] = y - l; } l = 1e6; for (let y = h - 1; y >= 0; y--) { const i = y * w + x; if (isS(i)) l = y; dn[i] = l - y; } }
-      for (let i = 0, j = 0; i < N; i++, j += 4) {
-        const near = fill[i] || (!isS(i) && Math.min(Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]), Math.hypot(D[j] - hl[0], D[j + 1] - hl[1], D[j + 2] - hl[2])) < 70);
-        if (near && ((lft[i] <= dmax && rgt[i] <= dmax) || (up[i] <= dmax && dn[i] <= dmax))) inner[i] = 1;
-      }
-    } else inner.set(fill);
-    { // referme les petites coupures dans les lettres (fermeture morphologique, rayon 2)
-      const rr = 1, tmp = new Uint8Array(N), dil = new Uint8Array(N);
-      const pass = (src, dst, isMax) => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let v = isMax ? 0 : 1; for (let k = -rr; k <= rr && (isMax ? !v : v); k++) { const yy = y + k; if (yy < 0 || yy >= h) continue; for (let q = -rr; q <= rr; q++) { const xx = x + q; if (xx < 0 || xx >= w) continue; const s = src[yy * w + xx]; if (isMax && s) { v = 1; break; } if (!isMax && !s) { v = 0; break; } } } dst[y * w + x] = v; } };
-      pass(inner, dil, true); pass(dil, tmp, false); inner.set(tmp);
-    }
-    { // retire les petites taches (scintillement du décor) : plus petites qu'un point de ponctuation
-      const lh = (c.box[3] - c.box[1]) * H / Math.max(1, (c.lines || [c.box]).length), minA = Math.max(6, lh * lh * 0.004);
-      const lab = new Int32Array(N), st = [], comp = []; let id = 0;
-      for (let s0 = 0; s0 < N; s0++) { if (!inner[s0] || lab[s0]) continue; id++; lab[s0] = id; st.push(s0); const pts = [];
-        while (st.length) { const q = st.pop(); pts.push(q); const x = q % w; for (const nb of [x > 0 ? q - 1 : -1, x < w - 1 ? q + 1 : -1, q - w, q + w]) if (nb >= 0 && nb < N && inner[nb] && !lab[nb]) { lab[nb] = id; st.push(nb); } }
-        if (pts.length < minA) for (const q of pts) inner[q] = 0; }
-    }
-    for (let i = 0; i < N; i++) { const v = inner[i] ? 0 : 255; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; }
-    bctx.putImageData(im, 0, 0);
-    // 2e image : lettres seules par contraste (meilleure sur certaines vidéos)
-    const bw2 = document.createElement("canvas"); bw2.width = w; bw2.height = h; const b2 = bw2.getContext("2d"); const im2 = b2.createImageData(w, h);
-    for (let i = 0; i < N; i++) { const v = fill[i] ? 0 : 255; im2.data[i * 4] = im2.data[i * 4 + 1] = im2.data[i * 4 + 2] = v; im2.data[i * 4 + 3] = 255; }
-    b2.putImageData(im2, 0, 0);
+    const lh = (c.tight[0][3] - c.tight[0][1]) * H, sc = clamp(64 / Math.max(8, lh), 1, 3);
+    const mk2 = sel => { const b = document.createElement("canvas"); b.width = w; b.height = h; const bx2 = b.getContext("2d"); const im = bx2.createImageData(w, h); for (let i = 0; i < N; i++) { const v = sel(i) ? 0 : 255; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; } bx2.putImageData(im, 0, 0); return b; };
+    const cands = [];
+    if (c._fillSet) cands.push(mk2(i => c._fillSet.has(i)));
+    cands.push(mk2(i => T[i]));
+    cands.push(c._crop);
+    const oc = document.createElement("canvas"); oc.width = Math.round(w * sc) + 40; oc.height = Math.round(h * sc) + 40; const ox = oc.getContext("2d");
     const scaled = src => { ox.fillStyle = "#fff"; ox.fillRect(0, 0, oc.width, oc.height); ox.imageSmoothingEnabled = true; ox.drawImage(src, 20, 20, w * sc, h * sc); return oc; };
     try {
       const wk = await getOCR();
-      // on lit les deux images et on garde la lecture la plus sûre (confiance moyenne des mots)
-      const score = d => { const ws = (d.words || []).filter(x => x.text && x.text.trim()); return ws.length ? ws.reduce((a, x) => a + x.confidence, 0) / ws.length : 0; };
-      const r1 = (await wk.recognize(scaled(bw))).data, r2 = (await wk.recognize(scaled(bw2))).data;
-      const data = score(r2) > score(r1) + 3 ? r2 : r1;
-      const lines = (data.lines || []).map(l => (l.words || []).filter(wd => wd.text && wd.text.trim() && wd.confidence > 20).map(wd => {
-        // mot en couleur ? on compare la couleur des lettres sous le mot
-        const ax = Math.max(0, Math.floor((wd.bbox.x0 - 20) / sc)), ay = Math.max(0, Math.floor((wd.bbox.y0 - 20) / sc)), bx = Math.min(w, Math.ceil((wd.bbox.x1 - 20) / sc)), by = Math.min(h, Math.ceil((wd.bbox.y1 - 20) / sc));
-        let nc = 0, nh = 0; for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) { const i = y * w + x; if (!fill[i]) continue; const j = i * 4; const dc = Math.hypot(D[j] - col[0], D[j + 1] - col[1], D[j + 2] - col[2]), dh = Math.hypot(D[j] - hl[0], D[j + 1] - hl[1], D[j + 2] - hl[2]); if (dh + 20 < dc) nh++; else nc++; }
-        return { t: wd.text.trim(), hl: false };
-      })).filter(l => l.length);
-      if (lines.length && placeholder(c)) { c.tl = lines; c.text = lines.map(l => l.map(x => x.t).join(" ")).join("\n"); }
-    } catch (e) { console.warn("lecture des mots", e); }
+      const score = d2 => { const ws = (d2.words || []).filter(x => x.text && x.text.trim()); return ws.length ? ws.reduce((a, x) => a + x.confidence, 0) / ws.length : 0; };
+      let best = null, bs = -1; for (const cnd of cands) { const r0 = (await wk.recognize(scaled(cnd))).data, s0 = score(r0); if (s0 > bs) { bs = s0; best = r0; } if (bs >= 85) break; }
+      const lines = (best && best.lines || []).map(l => (l.words || []).filter(wd => wd.text && wd.text.trim() && wd.confidence > 30).map(wd => ({ t: wd.text.trim(), hl: false }))).filter(l => l.length);
+      // vraisemblance : surtout des lettres/chiffres, au moins un mot de 3 lettres, lecture assez sûre
+      const all = lines.flat().map(x => x.t).join(""), alnum = all.replace(/[^\p{L}\p{N}]/gu, "").length;
+      const longWord = lines.flat().some(x => (x.t.match(/\p{L}/gu) || []).length >= 3);
+      c.weak = !(bs >= 65 && alnum >= 3 && alnum / Math.max(1, all.length) >= 0.6 && longWord);
+      if (lines.length && placeholder(c) && !c.weak) { c.tl = lines; c.text = lines.map(l => l.map(x => x.t).join(" ")).join("\n"); }
+    } catch (e) { console.warn("lecture des mots", e); c.weak = true; }
   }
   if (!c.tl && !placeholder(c)) c.tl = textLines(c.text, null);
+  };
 }
 function textLines(text, old) {
   const flat = old ? old.flat() : [];
@@ -1302,20 +1280,36 @@ async function prepEx(ex, onMsg) {
   ex.prep = (async () => {
     const vid = document.createElement("video"); vid.muted = true; vid.preload = "auto"; vid.src = ex.url; await once(vid, "loadeddata");
     const caps = ex.result.captions.filter(c => !c.mk || c.sig !== sigOf(c));
-    for (let i = 0; i < caps.length; i++) { if (onMsg) onMsg(`Lecture des mots ${i + 1}/${caps.length}…`); ex.prepMsg = `lecture des mots ${i + 1}/${caps.length}…`; setExMsg(ex, ex.msg); try { await prepCaption(ex, caps[i], vid); } catch (e) { console.warn(e); } }
+    for (let i = 0; i < caps.length; i++) { if (onMsg) onMsg(`Analyse du texte ${i + 1}/${caps.length}…`); ex.prepMsg = `analyse ${i + 1}/${caps.length}…`; setExMsg(ex, ex.msg); try { await prepCaption(ex, caps[i], vid); } catch (e) { console.warn(e); } }
     vid.removeAttribute("src"); vid.load();
-    // lecture exacte par Gemini (si une clé est enregistrée) ; sinon on garde la lecture locale
+    let geminiOk = false;
+    // lecture exacte par Gemini (si une clé est enregistrée) ; sinon lecture locale
     if (sampleNS) {
       const todo = ex.result.captions.filter(c => c._crop && !c.userText);
       if (todo.length) {
         if (onMsg) onMsg("Gemini lit le texte exact…");
         try {
           const imgs = await Promise.all(todo.map(c => new Promise(r => c._crop.toBlob(r, "image/png"))));
-          const res = await sampleNS.json(`Each image is a cropped caption from an Instagram Reel (image ${todo.map((_, i) => i + 1).join(", ")}). Transcribe the caption text of each image EXACTLY as written: same words, spelling, numbers, punctuation, capitalization and emojis; one entry per visual line, top to bottom. Never translate or correct. Reply only JSON: {"captions":[{"image":1,"lines":["first line","second line"]}]}`, { images: imgs });
-          (res && res.captions || []).forEach(k => { const c = todo[(+k.image || 0) - 1]; const lines = (k.lines || []).map(s => String(s).trim()).filter(Boolean); if (c && lines.length) { c.text = lines.join("\n"); c.tl = textLines(c.text, null); c.byGemini = true; } });
+          const res = await sampleNS.json(`Each image is a cropped caption from an Instagram Reel (image ${todo.map((_, i) => i + 1).join(", ")}). Transcribe the caption text of each image EXACTLY as written: same words, spelling, numbers, punctuation, capitalization and emojis; one entry per visual line, top to bottom. Never translate or correct. If an image contains no added caption text (only scenery, signs or nothing readable), return an empty "lines" list for it. Reply only JSON: {"captions":[{"image":1,"lines":["first line","second line"]}]}`, { images: imgs });
+          if (res && Array.isArray(res.captions)) geminiOk = true;
+          (res && res.captions || []).forEach(k => { const c = todo[(+k.image || 0) - 1]; if (!c) return; const lines = (k.lines || []).map(s => String(s).trim()).filter(Boolean); if (lines.length) { c.text = lines.join("\n"); c.tl = textLines(c.text, null); c.byGemini = true; c.skip = false; c.weak = false; } else { c.skip = true; c.byGemini = true; } });
         } catch (e) { console.warn("Gemini lecture", e); }
       }
     }
+    if (!geminiOk) {
+      // du plus grand cadre au plus petit ; un cadre qui recouvre un texte déjà lu n'est pas relu
+      const area = b => (b[2] - b[0]) * (b[3] - b[1]);
+      const hit = (a2, b2) => Math.min(a2.end, b2.end) - Math.max(a2.start, b2.start) > 0.05 && Math.max(0, Math.min(a2.box[2], b2.box[2]) - Math.max(a2.box[0], b2.box[0])) * Math.max(0, Math.min(a2.box[3], b2.box[3]) - Math.max(a2.box[1], b2.box[1])) > 0.3 * Math.min(area(a2.box), area(b2.box));
+      const order = ex.result.captions.filter(c => c._ocr && !c.userText).sort((a2, b2) => area(b2.box) - area(a2.box)), ok = [];
+      for (let i = 0; i < order.length; i++) { const c = order[i]; if (ok.some(o => hit(o, c))) { c.skip = true; continue; }
+        if (onMsg) onMsg(`Lecture du texte ${i + 1}/${order.length}…`); await c._ocr(); if (c.weak) c.skip = true; else ok.push(c); }
+    }
+    // cadres qui se recouvrent (les deux méthodes ont trouvé le même texte) : on garde le plus grand qui est lisible
+    { const cs = ex.result.captions, area = b => Math.max(1e-6, (b[2] - b[0]) * (b[3] - b[1]));
+      const ov = (a2, b2) => { if (Math.min(a2.end, b2.end) - Math.max(a2.start, b2.start) <= 0.05) return 0; const ix = Math.max(0, Math.min(a2.box[2], b2.box[2]) - Math.max(a2.box[0], b2.box[0])), iy = Math.max(0, Math.min(a2.box[3], b2.box[3]) - Math.max(a2.box[1], b2.box[1])); return ix * iy / Math.min(area(a2.box), area(b2.box)); };
+      for (const a2 of cs) for (const b2 of cs) if (a2 !== b2 && !a2.skip && !b2.skip && !a2.userText && ov(a2, b2) > 0.3) (area(a2.box) >= area(b2.box) ? b2 : a2).skip = true;
+      ex.result.captions = cs.filter(c => !c.skip || c.userText);
+      ex.result.captions.sort((a2, b2) => a2.start - b2.start || a2.box[1] - b2.box[1]); }
     dirty = true; S.variants.filter(v => v.exId === ex.id).forEach(drawThumb);
     if (S.selected === ex.id || (current() && current().exId === ex.id)) renderEditor();
   })();
@@ -1414,7 +1408,7 @@ function drawText(ctx, c, v, W, H, forced) {
   });
 }
 function ensureFont(v) { if (v && !fontOf(v.font)) { const pool = fontPool(); v.font = pool[Math.floor(Math.random() * pool.length)].n; loadFont(v.font); } }
-function fontActive(v, c) { return !!(v && v.font && fontOf(v.font) && c.mk && c.tl && c.tl.length); }
+function fontActive(v, c) { return !c.skip && !!(v && v.font && fontOf(v.font) && c.mk && c.tl && c.tl.length); }
 /* même taille pour les lignes qui avaient la même hauteur dans l'original (ex. une liste 1. 2. 3.) */
 function harmonized(ctx, ex, v, W, H) {
   const caps = ex.result.captions.filter(c => fontActive(v, c));
@@ -1598,7 +1592,7 @@ async function renderVideo(v, onProg, slot = 0) {
   const W = vid.videoWidth, H = vid.videoHeight, srcDur = vid.duration;
   const { cv, r, release } = exportRenderer(W, H);
   ensureFont(v); await prepEx(ex); await loadFont(v.font);
-  const miss = ex.result.captions.findIndex(c => !fontActive(v, c));
+  const miss = ex.result.captions.findIndex(c => !c.skip && !fontActive(v, c));
   if (miss >= 0) { release(); vid.removeAttribute("src"); vid.load(); throw new Error(`Le texte n°${miss + 1} n’a pas pu être lu : écris-le dans le Studio (variante 1), puis relance.`); }
   const c2 = document.createElement("canvas"); c2.width = W; c2.height = H; const cc = { cv: c2, ctx: c2.getContext("2d", { alpha: false }) };
   // seule la zone du texte est modifiée ; le reste de l'image est la vidéo d'origine
@@ -2174,7 +2168,7 @@ function makeZip(files) {
 /* ---------- project file ---------- */
 function serial() {
   return { v: 3, settings: S.settings,
-    examples: S.examples.map(x => ({ id: x.id, name: x.name, size: x.size, w: x.w, h: x.h, dur: x.dur, tol: x.tol, result: x.result ? { ...x.result, captions: x.result.captions.map(({ mk, plans, sig, _crop, ...c }) => c) } : null })),
+    examples: S.examples.map(x => ({ id: x.id, name: x.name, size: x.size, w: x.w, h: x.h, dur: x.dur, tol: x.tol, result: x.result ? { ...x.result, captions: x.result.captions.map(({ mk, plans, sig, _crop, _fillSet, _ocr, ...c }) => c) } : null })),
     variants: S.variants.map(v => ({ id: v.id, n: v.n, exId: v.exId, srcName: v.srcName, fill: v.fill, hl: v.hl, colName: v.colName, per: v.per, auto: v.auto, font: v.font || null, size: v.size, stroke: v.stroke, strokeOn: v.strokeOn })) };
 }
 $("#btnSave").onclick = () => saveFile("projet_variantes.json", JSON.stringify(serial(), null, 2));
