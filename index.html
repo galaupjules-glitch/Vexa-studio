@@ -345,7 +345,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
 </div>
 <div class="dlg" id="setDlg" hidden>
   <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-17 c (tout texte)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
+    <div class="row" style="justify-content:space-between"><h3 id="setTitle">Réglages (une seule fois) <small class="muted" style="font-weight:400;font-size:12px">version 2026-11-17 e (décor net)</small></h3><button class="icon-btn" id="setClose" type="button" aria-label="Fermer">✕</button></div>
     <p class="hint" style="margin:0">Ces clés viennent de ton projet Google Cloud. Elles restent dans ce navigateur.</p>
     <label class="fld"><span>ID client OAuth « Application Web » (…apps.googleusercontent.com)</span><input type="text" id="setClient" autocomplete="off"></label>
     <label class="fld"><span>Clé API Google (sélecteur de dossier)</span><input type="text" id="setKey" autocomplete="off"></label>
@@ -1310,6 +1310,8 @@ async function prepEx(ex, onMsg) {
       for (const a2 of cs) for (const b2 of cs) if (a2 !== b2 && !a2.skip && !b2.skip && !a2.userText && ov(a2, b2) > 0.3) (area(a2.box) >= area(b2.box) ? b2 : a2).skip = true;
       ex.result.captions = cs.filter(c => !c.skip || c.userText);
       ex.result.captions.sort((a2, b2) => a2.start - b2.start || a2.box[1] - b2.box[1]); }
+    // décor réel derrière le texte (pris dans d'autres images, grâce au mouvement de la caméra)
+    try { if (onMsg) onMsg("Reconstruction du décor derrière le texte…"); ex.bg = await buildBackground(ex, onMsg); } catch (e) { console.warn("décor", e); ex.bg = null; }
     dirty = true; S.variants.filter(v => v.exId === ex.id).forEach(drawThumb);
     if (S.selected === ex.id || (current() && current().exId === ex.id)) renderEditor();
   })();
@@ -1334,17 +1336,225 @@ function planFor(c, W, H) {
 }
 /* Efface l'ancien texte : la zone est reconstruite à partir du décor autour, du plus flou au plus net
    (pyramide « push-pull »), ce qui donne un raccord doux, sans quadrillage. */
+/* ---------- décor réel : suivi du mouvement de la caméra + images de référence ---------- */
+// décalage (dx, dy) tel que cur[x, y] ≈ prev[x - dx, y - dy], en ignorant la zone du texte (E)
+function estShift(A, B, w, h, E) {
+  const sad = (A1, B1, E1, w1, h1, dx, dy, m) => { let s = 0, n = 0; for (let y = m; y < h1 - m; y++) { const yy = y - dy; for (let x = m; x < w1 - m; x++) { const i = y * w1 + x, j = yy * w1 + x - dx; if (E1[i] || E1[j]) continue; s += Math.abs(B1[i] - A1[j]); n++; } } return n > 60 ? s / n : 1e9; };
+  const w2 = w >> 1, h2 = h >> 1, A2 = new Float32Array(w2 * h2), B2 = new Float32Array(w2 * h2), E2 = new Uint8Array(w2 * h2);
+  for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) { const q = y * w2 + x, i = 2 * y * w + 2 * x; A2[q] = (A[i] + A[i + 1] + A[i + w] + A[i + w + 1]) / 4; B2[q] = (B[i] + B[i + 1] + B[i + w] + B[i + w + 1]) / 4; E2[q] = E[i] | E[i + 1] | E[i + w] | E[i + w + 1]; }
+  let bx = 0, by = 0, bs = 1e9;
+  for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) { const s = sad(A2, B2, E2, w2, h2, dx, dy, 7); if (s < bs) { bs = s; bx = dx; by = dy; } }
+  let fx = 2 * bx, fy = 2 * by, fs = 1e9; const S = {};
+  for (let dy = 2 * by - 1; dy <= 2 * by + 1; dy++) for (let dx = 2 * bx - 1; dx <= 2 * bx + 1; dx++) { const s = sad(A, B, E, w, h, dx, dy, 14); S[dx + "," + dy] = s; if (s < fs) { fs = s; fx = dx; fy = dy; } }
+  const par = (a, b, c) => { const den = a - 2 * b + c; return den > 0 ? clamp(0.5 * (a - c) / den, -0.5, 0.5) : 0; };
+  const sx = par(S[(fx - 1) + "," + fy] ?? sad(A, B, E, w, h, fx - 1, fy, 14), fs, S[(fx + 1) + "," + fy] ?? sad(A, B, E, w, h, fx + 1, fy, 14));
+  const sy = par(S[fx + "," + (fy - 1)] ?? sad(A, B, E, w, h, fx, fy - 1, 14), fs, S[fx + "," + (fy + 1)] ?? sad(A, B, E, w, h, fx, fy + 1, 14));
+  return [fx + sx, fy + sy];
+}
+async function buildBackground(ex, onMsg) {
+  const caps = ex.result.captions.filter(c => c.mk && !c.skip); if (!caps.length) return null;
+  const vid = document.createElement("video"); vid.muted = true; vid.playsInline = true; vid.preload = "auto"; vid.src = ex.url; await once(vid, "loadeddata");
+  if (!vid.requestVideoFrameCallback) return null;
+  const W = vid.videoWidth, H = vid.videoHeight;
+  // zone utile : tous les textes + une marge (le décor qui passera derrière vient de là)
+  let ux0 = W, uy0 = H, ux1 = 0, uy1 = 0; const plans = caps.map(c => planFor(c, W, H));
+  plans.forEach(p => { ux0 = Math.min(ux0, p.x); uy0 = Math.min(uy0, p.y); ux1 = Math.max(ux1, p.x + p.w); uy1 = Math.max(uy1, p.y + p.h); });
+  const mX = Math.round(W * 0.18), mY = Math.round(H * 0.07);
+  const R = { x: Math.max(0, ux0 - mX), y: Math.max(0, uy0 - mY) }; R.w = Math.min(W, ux1 + mX) - R.x; R.h = Math.min(H, uy1 + mY) - R.y;
+  const U = new Uint8Array(R.w * R.h);
+  plans.forEach(p => { for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) if (p.M[y * p.w + x]) { const X = p.x + x - R.x, Y = p.y + y - R.y; if (X >= 0 && Y >= 0 && X < R.w && Y < R.h) U[Y * R.w + X] = 1; } });
+  // image réduite pour suivre la caméra (zone du texte exclue)
+  const lw = 160, lh = Math.round(lw * H / W) & ~1, E = new Uint8Array(lw * lh);
+  plans.forEach(p => { const a = Math.floor(p.x * lw / W) - 1, b = Math.floor(p.y * lh / H) - 1, cc = Math.ceil((p.x + p.w) * lw / W) + 1, dd = Math.ceil((p.y + p.h) * lh / H) + 1; for (let y = Math.max(0, b); y < Math.min(lh, dd); y++) for (let x = Math.max(0, a); x < Math.min(lw, cc); x++) E[y * lw + x] = 1; });
+  const lc = document.createElement("canvas"); lc.width = lw; lc.height = lh; const lx = lc.getContext("2d", { willReadFrequently: true });
+  const rc = document.createElement("canvas"); rc.width = R.w; rc.height = R.h; const rx = rc.getContext("2d", { willReadFrequently: true });
+  const times = [], pos = [], refs = [], refStep = Math.max(0.35, vid.duration / 28);
+  let prevL = null, px = 0, py = 0, nextRef = 0;
+  await new Promise(res => {
+    let done = false; const finish = () => { if (!done) { done = true; res(); } };
+    const onFrame = (now, meta) => {
+      if (done) return;
+      const tt = meta && meta.mediaTime != null ? meta.mediaTime : vid.currentTime;
+      lx.drawImage(vid, 0, 0, lw, lh); const dd = lx.getImageData(0, 0, lw, lh).data, L = new Float32Array(lw * lh);
+      for (let i = 0, j = 0; i < L.length; i++, j += 4) L[i] = dd[j] * 0.299 + dd[j + 1] * 0.587 + dd[j + 2] * 0.114;
+      if (prevL) { const [dx, dy] = estShift(prevL, L, lw, lh, E); px += dx * W / lw; py += dy * H / lh; }
+      prevL = L; times.push(tt); pos.push([px, py]);
+      if (tt >= nextRef) { rx.drawImage(vid, R.x, R.y, R.w, R.h, 0, 0, R.w, R.h); refs.push({ t: tt, pos: [px, py], data: rx.getImageData(0, 0, R.w, R.h).data }); nextRef = tt + refStep; }
+      if (onMsg && times.length % 10 === 0) onMsg(`Reconstruction du décor… ${Math.round(100 * tt / vid.duration)} %`);
+      if (vid.ended) finish(); else vid.requestVideoFrameCallback(onFrame);
+    };
+    vid.requestVideoFrameCallback(onFrame);
+    vid.addEventListener("ended", () => setTimeout(finish, 200), { once: true });
+    setTimeout(finish, vid.duration * 1000 + 20000);
+    vid.playbackRate = 2; vid.play().catch(finish);
+  });
+  vid.pause(); vid.removeAttribute("src"); vid.load();
+  if (times.length < 5 || !refs.length) return null;
+  const bg = { W, H, R, U, times, pos, refs };
+  await buildPlates(bg, caps, onMsg);
+  return bg;
+}
+/* Remplissage « d'après le contenu » (PatchMatch, multi-échelle) : chaque pixel caché reçoit
+   de vrais morceaux de texture du décor voisin, choisis pour bien raccorder → net, pas flou. */
+function inpaintPM(img, w, h, hole) {
+  const r = 3, PS = 2 * r + 1;
+  // pyramide
+  const levels = []; let I = new Float32Array(w * h * 3), Mk = Uint8Array.from(hole), lw = w, lh = h;
+  for (let i = 0; i < w * h; i++) { I[i * 3] = img[i * 4]; I[i * 3 + 1] = img[i * 4 + 1]; I[i * 3 + 2] = img[i * 4 + 2]; }
+  levels.push({ I, M: Mk, w: lw, h: lh });
+  while (Math.min(lw, lh) > 48 && levels.length < 5) {
+    const w2 = lw >> 1, h2 = lh >> 1, I2 = new Float32Array(w2 * h2 * 3), M2 = new Uint8Array(w2 * h2), P = levels[levels.length - 1];
+    for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) { const q = y * w2 + x; let hm = 0, n = 0, s0 = 0, s1 = 0, s2 = 0;
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) { const i = (2 * y + dy) * lw + 2 * x + dx; if (P.M[i]) { hm = 1; continue; } s0 += P.I[i * 3]; s1 += P.I[i * 3 + 1]; s2 += P.I[i * 3 + 2]; n++; }
+      M2[q] = hm; if (n) { I2[q * 3] = s0 / n; I2[q * 3 + 1] = s1 / n; I2[q * 3 + 2] = s2 / n; } }
+    lw = w2; lh = h2; levels.push({ I: I2, M: M2, w: lw, h: lh });
+  }
+  // départ grossier : remplissage doux du niveau le plus petit
+  { const L = levels[levels.length - 1]; const N = L.w * L.h; let known = Uint8Array.from(L.M, v => v ? 0 : 1);
+    for (let pass = 0; pass < 400; pass++) { let left = 0; const nk = Uint8Array.from(known);
+      for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) { const i = y * L.w + x; if (known[i]) continue; let n = 0, s0 = 0, s1 = 0, s2 = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= L.w || yy >= L.h) continue; const j = yy * L.w + xx; if (!known[j]) continue; s0 += L.I[j * 3]; s1 += L.I[j * 3 + 1]; s2 += L.I[j * 3 + 2]; n++; }
+        if (n) { L.I[i * 3] = s0 / n; L.I[i * 3 + 1] = s1 / n; L.I[i * 3 + 2] = s2 / n; nk[i] = 1; } else left++; }
+      known = nk; if (!left) break; } }
+  let NNF = null; // offsets (dx, dy) par pixel du niveau courant
+  for (let k = levels.length - 1; k >= 0; k--) {
+    const { I, M, w: W2, h: H2 } = levels[k], N = W2 * H2;
+    // sources valides : patch entièrement hors du trou
+    const ii = new Int32Array((W2 + 1) * (H2 + 1));
+    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) ii[(y + 1) * (W2 + 1) + x + 1] = M[y * W2 + x] + ii[y * (W2 + 1) + x + 1] + ii[(y + 1) * (W2 + 1) + x] - ii[y * (W2 + 1) + x];
+    const validSrc = (x, y) => x >= r && y >= r && x < W2 - r && y < H2 - r && (ii[(y + r + 1) * (W2 + 1) + x + r + 1] - ii[(y - r) * (W2 + 1) + x + r + 1] - ii[(y + r + 1) * (W2 + 1) + x - r] + ii[(y - r) * (W2 + 1) + x - r]) === 0;
+    const srcs = []; for (let y = r; y < H2 - r; y++) for (let x = r; x < W2 - r; x++) if (validSrc(x, y)) srcs.push(y * W2 + x);
+    if (!srcs.length) continue;
+    // cibles : pixels dont le patch touche le trou
+    const tgt = new Uint8Array(N); for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (M[y * W2 + x]) for (let yy = Math.max(0, y - r); yy <= Math.min(H2 - 1, y + r); yy++) for (let xx = Math.max(0, x - r); xx <= Math.min(W2 - 1, x + r); xx++) tgt[yy * W2 + xx] = 1;
+    const nx = new Int32Array(N), ny = new Int32Array(N), nd = new Float32Array(N).fill(1e30);
+    const dist = (px, py, qx, qy, best) => { let s = 0; for (let oy = -r; oy <= r; oy++) { const ay = py + oy; if (ay < 0 || ay >= H2) continue; const by = qy + oy; for (let ox = -r; ox <= r; ox++) { const ax = px + ox; if (ax < 0 || ax >= W2) continue; const a = (ay * W2 + ax) * 3, b = (by * W2 + qx + ox) * 3; const d0 = I[a] - I[b], d1 = I[a + 1] - I[b + 1], d2 = I[a + 2] - I[b + 2]; s += d0 * d0 + d1 * d1 + d2 * d2; } if (s > best) return s; } return s; };
+    const rnd = () => srcs[(Math.random() * srcs.length) | 0];
+    for (let i = 0; i < N; i++) { if (!tgt[i]) continue; const x = i % W2, y = (i - x) / W2; let q = -1;
+      if (NNF) { const cx = x >> 1, cy = y >> 1, cw = levels[k + 1].w; if (cx < cw && cy < levels[k + 1].h) { const c = cy * cw + cx; const qx = x + NNF.x[c] * 2, qy = y + NNF.y[c] * 2; if (validSrc(qx, qy)) q = qy * W2 + qx; } }
+      if (q < 0) q = rnd(); const qx = q % W2, qy = (q - qx) / W2; nx[i] = qx - x; ny[i] = qy - y; nd[i] = dist(x, y, qx, qy, 1e30); }
+    const vote = () => { // chaque pixel caché = moyenne pondérée des patchs qui le recouvrent
+      const acc = new Float32Array(N * 4); const ds = []; for (let i = 0; i < N; i += 7) if (tgt[i]) ds.push(nd[i]); ds.sort((a, b) => a - b); const sig = Math.max(1, ds[Math.floor(ds.length * 0.75)] || 1);
+      for (let i = 0; i < N; i++) { if (!tgt[i]) continue; const x = i % W2, y = (i - x) / W2, wgt = Math.exp(-nd[i] / (2 * sig)) + 1e-6, qx = x + nx[i], qy = y + ny[i];
+        for (let oy = -r; oy <= r; oy++) { const ty = y + oy; if (ty < 0 || ty >= H2) continue; for (let ox = -r; ox <= r; ox++) { const tx = x + ox; if (tx < 0 || tx >= W2) continue; const tI = ty * W2 + tx; if (!M[tI]) continue; const s = ((qy + oy) * W2 + qx + ox) * 3; acc[tI * 4] += I[s] * wgt; acc[tI * 4 + 1] += I[s + 1] * wgt; acc[tI * 4 + 2] += I[s + 2] * wgt; acc[tI * 4 + 3] += wgt; } } }
+      for (let i = 0; i < N; i++) if (M[i] && acc[i * 4 + 3] > 0) { I[i * 3] = acc[i * 4] / acc[i * 4 + 3]; I[i * 3 + 1] = acc[i * 4 + 1] / acc[i * 4 + 3]; I[i * 3 + 2] = acc[i * 4 + 2] / acc[i * 4 + 3]; }
+    };
+    if (NNF) vote(); // estimation de départ à partir du niveau plus petit
+    const iters = k === 0 ? 3 : k === levels.length - 1 ? 6 : 4;
+    for (let it = 0; it < iters; it++) {
+      for (let i = 0; i < N; i++) if (tgt[i]) { const x = i % W2, y = (i - x) / W2; nd[i] = dist(x, y, x + nx[i], y + ny[i], 1e30); }
+      const fwd = it % 2 === 0, st = fwd ? 1 : -1;
+      for (let y = fwd ? 0 : H2 - 1; fwd ? y < H2 : y >= 0; y += st) for (let x = fwd ? 0 : W2 - 1; fwd ? x < W2 : x >= 0; x += st) {
+        const i = y * W2 + x; if (!tgt[i]) continue;
+        for (const [ax, ay] of [[x - st, y], [x, y - st]]) { if (ax < 0 || ay < 0 || ax >= W2 || ay >= H2) continue; const a = ay * W2 + ax; if (!tgt[a]) continue; const qx = x + nx[a], qy = y + ny[a]; if (!validSrc(qx, qy)) continue; const dd = dist(x, y, qx, qy, nd[i]); if (dd < nd[i]) { nd[i] = dd; nx[i] = nx[a]; ny[i] = ny[a]; } }
+        let rad = Math.max(W2, H2); while (rad >= 1) { const qx = Math.round(x + nx[i] + (Math.random() * 2 - 1) * rad), qy = Math.round(y + ny[i] + (Math.random() * 2 - 1) * rad); if (validSrc(qx, qy)) { const dd = dist(x, y, qx, qy, nd[i]); if (dd < nd[i]) { nd[i] = dd; nx[i] = qx - x; ny[i] = qy - y; } } rad >>= 1; }
+      }
+      vote();
+    }
+    NNF = { x: nx, y: ny };
+  }
+  const I0 = levels[0].I; for (let i = 0; i < w * h; i++) if (hole[i]) { img[i * 4] = I0[i * 3]; img[i * 4 + 1] = I0[i * 3 + 1]; img[i * 4 + 2] = I0[i * 3 + 2]; }
+}
+/* décor complet derrière chaque texte (« plaque ») : vrais pixels d'autres images + remplissage d'après le contenu */
+async function buildPlates(bg, caps, onMsg) {
+  const R = bg.R, N = R.w * R.h;
+  // bordure du trou (pour vérifier qu'une autre image raccorde)
+  const ring = []; for (let y = 0; y < R.h; y += 2) for (let x = 0; x < R.w; x += 2) { const i = y * R.w + x; if (bg.U[i]) continue; let nr = false; for (let k = -6; k <= 6 && !nr; k += 3) for (let q = -6; q <= 6; q += 3) { const yy = y + k, xx = x + q; if (yy >= 0 && xx >= 0 && yy < R.h && xx < R.w && bg.U[yy * R.w + xx]) { nr = true; break; } } if (nr) ring.push(i); }
+  bg.plates = {};
+  for (let ci = 0; ci < caps.length; ci++) {
+    const c = caps[ci]; if (onMsg) onMsg(`Reconstruction nette du décor ${ci + 1}/${caps.length}…`);
+    const mid = (c.start + c.end) / 2, base = bg.refs.reduce((a, b) => Math.abs(b.t - mid) < Math.abs(a.t - mid) ? b : a);
+    const img = new Uint8ClampedArray(base.data), hole = Uint8Array.from(bg.U);
+    // 1) vrais pixels pris dans les autres images (recalées), quand elles raccordent
+    const others = bg.refs.filter(r => r !== base).sort((a, b) => Math.abs(a.t - base.t) - Math.abs(b.t - base.t));
+    for (const ref of others) {
+      const dx = Math.round(base.pos[0] - ref.pos[0]), dy = Math.round(base.pos[1] - ref.pos[1]); if (Math.abs(dx) + Math.abs(dy) < 3) continue;
+      const src = i => { const x = i % R.w, y = (i - x) / R.w, X = x - dx, Y = y - dy; if (X < 0 || Y < 0 || X >= R.w || Y >= R.h) return -1; const q = Y * R.w + X; return bg.U[q] ? -1 : q * 4; };
+      let n = 0, m0 = 0, m1 = 0, m2 = 0, err = 0; const a = ref.data;
+      for (const i of ring) { const q = src(i); if (q < 0) continue; m0 += img[i * 4] - a[q]; m1 += img[i * 4 + 1] - a[q + 1]; m2 += img[i * 4 + 2] - a[q + 2]; n++; }
+      if (n < ring.length * 0.4) continue; m0 /= n; m1 /= n; m2 /= n;
+      for (const i of ring) { const q = src(i); if (q < 0) continue; err += Math.abs(img[i * 4] - a[q] - m0) + Math.abs(img[i * 4 + 1] - a[q + 1] - m1) + Math.abs(img[i * 4 + 2] - a[q + 2] - m2); }
+      if (err / (3 * n) > 14) continue;
+      for (let i = 0; i < N; i++) { if (!hole[i]) continue; const q = src(i); if (q < 0) continue; img[i * 4] = a[q] + m0; img[i * 4 + 1] = a[q + 1] + m1; img[i * 4 + 2] = a[q + 2] + m2; hole[i] = 0; }
+      await sleep(0);
+    }
+    // 2) ce qui n'a jamais été visible : remplissage d'après le contenu (net)
+    let left = 0; for (let i = 0; i < N; i++) left += hole[i];
+    if (left) { // on travaille sur la bande utile (trou + marge), pas sur toute la zone
+      let y0 = R.h, y1 = 0; for (let i = 0; i < N; i++) if (hole[i]) { const y = (i / R.w) | 0; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      const th = y1 - y0 + 1, ya = Math.max(0, y0 - Math.round(th * 1.2) - 8), yb = Math.min(R.h, y1 + Math.round(th * 1.2) + 9), bh = yb - ya;
+      const sub = img.subarray(ya * R.w * 4, yb * R.w * 4), sh = hole.subarray(ya * R.w, yb * R.w);
+      inpaintPM(sub, R.w, bh, sh);
+    }
+    bg.plates[c.id] = { img, pos: base.pos };
+    await sleep(0);
+  }
+}
+function plateFill(d, p, bg, plate, t, filled) {
+  const R = bg.R, P = posAt(bg, t), dx = Math.round(P[0] - plate.pos[0]), dy = Math.round(P[1] - plate.pos[1]), a = plate.img;
+  const at = i => { const x = i % p.w, y = (i - x) / p.w, X = p.x + x - dx - R.x, Y = p.y + y - dy - R.y; return X < 0 || Y < 0 || X >= R.w || Y >= R.h ? -1 : (Y * R.w + X) * 4; };
+  ensureRing(p);
+  let n = 0, m0 = 0, m1 = 0, m2 = 0; for (const i of p.ring) { const q = at(i); if (q < 0) continue; const j = i * 4; m0 += d[j] - a[q]; m1 += d[j + 1] - a[q + 1]; m2 += d[j + 2] - a[q + 2]; n++; }
+  if (n) { m0 /= n; m1 /= n; m2 /= n; }
+  for (let i = 0; i < p.w * p.h; i++) { if (!p.M[i] || filled[i]) continue; const q = at(i); if (q < 0) continue; const j = i * 4; d[j] = a[q] + m0; d[j + 1] = a[q + 1] + m1; d[j + 2] = a[q + 2] + m2; filled[i] = 1; }
+}
+function posAt(bg, t) {
+  const T = bg.times; let lo = 0, hi = T.length - 1;
+  if (t <= T[0]) return bg.pos[0]; if (t >= T[hi]) return bg.pos[hi];
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (T[m] <= t) lo = m; else hi = m; }
+  const k = (t - T[lo]) / Math.max(1e-6, T[hi] - T[lo]), a = bg.pos[lo], b = bg.pos[hi];
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+}
+// bordure autour du texte : sert à vérifier que le décor importé raccorde bien (et à ajuster la luminosité)
+function ensureRing(p) {
+  if (p.ring) return;
+  const ring = []; const r = 4;
+  for (let y = 0; y < p.h; y += 1) for (let x = 0; x < p.w; x += 1) { const i = y * p.w + x; if (p.M[i]) continue; let near = false; for (let k = -r; k <= r && !near; k += 2) for (let q = -r; q <= r; q += 2) { const yy = y + k, xx = x + q; if (yy >= 0 && xx >= 0 && yy < p.h && xx < p.w && p.M[yy * p.w + xx]) { near = true; break; } } if (near) ring.push(i); }
+  p.ring = Int32Array.from(ring.filter((_, k) => k % 2 === 0));
+}
+// remplit les pixels du texte avec le décor réel d'autres images (recalé + même luminosité) ; renvoie les pixels remplis
+function temporalFill(d, p, bg, t, filled0) {
+  const N = p.w * p.h, filled = filled0 || new Uint8Array(N), R = bg.R;
+  ensureRing(p);
+  const P = posAt(bg, t);
+  const cand = bg.refs.map(r => ({ r, dx: Math.round(P[0] - r.pos[0]), dy: Math.round(P[1] - r.pos[1]), dt: Math.abs(r.t - t) })).filter(c => Math.abs(c.dx) + Math.abs(c.dy) >= 3).sort((a, b) => a.dt - b.dt).slice(0, 8);
+  const at = (c, i) => { const x = i % p.w, y = (i - x) / p.w, X = p.x + x - c.dx - R.x, Y = p.y + y - c.dy - R.y; if (X < 0 || Y < 0 || X >= R.w || Y >= R.h) return -1; const q = Y * R.w + X; return bg.U[q] ? -1 : q * 4; };
+  const scored = [];
+  for (const c of cand) {
+    let n = 0, err = 0, m0 = 0, m1 = 0, m2 = 0;
+    for (const i of p.ring) { const q = at(c, i); if (q < 0) continue; const j = i * 4, a = c.r.data; const e0 = d[j] - a[q], e1 = d[j + 1] - a[q + 1], e2 = d[j + 2] - a[q + 2]; m0 += e0; m1 += e1; m2 += e2; n++; }
+    if (n < p.ring.length * 0.5) continue;
+    m0 /= n; m1 /= n; m2 /= n;
+    for (const i of p.ring) { const q = at(c, i); if (q < 0) continue; const j = i * 4, a = c.r.data; err += Math.abs(d[j] - a[q] - m0) + Math.abs(d[j + 1] - a[q + 1] - m1) + Math.abs(d[j + 2] - a[q + 2] - m2); }
+    scored.push({ c, err: err / (3 * n), m: [m0, m1, m2] });
+  }
+  scored.sort((a, b) => a.err - b.err);
+  for (const s of scored) {
+    if (s.err > 16) break; // ne raccorde pas (quelqu'un passe derrière, zoom…) → on n'utilise pas cette image
+    const a = s.c.r.data;
+    for (let i = 0; i < N; i++) { if (!p.M[i] || filled[i]) continue; const q = at(s.c, i); if (q < 0) continue; const j = i * 4; d[j] = a[q] + s.m[0]; d[j + 1] = a[q + 1] + s.m[1]; d[j + 2] = a[q + 2] + s.m[2]; filled[i] = 1; }
+  }
+  return filled;
+}
 let _ec = null;
-function erase(ctx, c, W, H) {
+function erase(ctx, c, W, H, t, ex) {
   const p = planFor(c, W, H); if (!p.n) return;
   if (!_ec) { const cv = document.createElement("canvas"); _ec = { cv, x: cv.getContext("2d", { willReadFrequently: true }) }; }
   if (_ec.cv.width < p.w || _ec.cv.height < p.h) { _ec.cv.width = Math.max(_ec.cv.width, p.w); _ec.cv.height = Math.max(_ec.cv.height, p.h); }
   const e2 = _ec.x; e2.clearRect(0, 0, p.w, p.h); e2.drawImage(ctx.canvas, p.x, p.y, p.w, p.h, 0, 0, p.w, p.h);
   const im = e2.getImageData(0, 0, p.w, p.h), d = im.data;
+  // d'abord les vrais pixels du décor, pris dans d'autres images ; le reste est complété en douceur
+  let filled = null;
+  if (ex && ex.bg && ex.bg.W === W && ex.bg.H === H && t != null) {
+    filled = new Uint8Array(p.w * p.h);
+    const plate = ex.bg.plates && ex.bg.plates[c.id];
+    if (plate) plateFill(d, p, ex.bg, plate, t, filled);   // décor reconstruit, net et stable
+    temporalFill(d, p, ex.bg, t, filled);                  // complément éventuel
+  }
   // niveau 0 : couleurs connues (hors texte) avec poids 1, pixels du texte avec poids 0
   let w = p.w, h = p.h, N = w * h;
   let R = new Float32Array(N), G = new Float32Array(N), B = new Float32Array(N), Wt = new Float32Array(N);
-  for (let i = 0, j = 0; i < N; i++, j += 4) if (!p.M[i]) { R[i] = d[j]; G[i] = d[j + 1]; B[i] = d[j + 2]; Wt[i] = 1; }
+  for (let i = 0, j = 0; i < N; i++, j += 4) if (!p.M[i] || (filled && filled[i])) { R[i] = d[j]; G[i] = d[j + 1]; B[i] = d[j + 2]; Wt[i] = 1; }
   const lv = [{ w, h, R, G, B, Wt }];
   while (w > 1 || h > 1) { // réduction : moyenne pondérée 2×2
     const w2 = Math.max(1, Math.ceil(w / 2)), h2 = Math.max(1, Math.ceil(h / 2)), n2 = w2 * h2;
@@ -1365,7 +1575,7 @@ function erase(ctx, c, W, H) {
     }
   }
   const f = lv[0];
-  for (let i = 0, j = 0; i < N; i++, j += 4) if (p.M[i]) { d[j] = f.R[i]; d[j + 1] = f.G[i]; d[j + 2] = f.B[i]; }
+  for (let i = 0, j = 0; i < N; i++, j += 4) if (p.M[i] && !(filled && filled[i])) { d[j] = f.R[i]; d[j + 1] = f.G[i]; d[j + 2] = f.B[i]; }
   e2.putImageData(im, 0, 0); ctx.drawImage(_ec.cv, 0, 0, p.w, p.h, p.x, p.y, p.w, p.h);
 }
 /* réécrit le texte : mêmes lignes, même place, même hauteur que l'original */
@@ -1431,8 +1641,8 @@ function composeFont(ctx, src, W, H, ex, v, t) {
   const on = ex.result.captions.filter(c => t >= c.start - 0.01 && t <= c.end + 0.01 && fontActive(v, c));
   if (!on.length) return;
   const sz = harmonized(ctx, ex, v, W, H);
-  for (const c of on) erase(ctx, c, W, H);                  // d'abord on efface tous les textes affichés…
-  for (const c of on) drawText(ctx, c, v, W, H, sz[c.id]); // …puis on les réécrit
+  for (const c of on) erase(ctx, c, W, H, t, ex);                  // d'abord on efface tous les textes affichés…
+  if (!window.__vxNoText) for (const c of on) drawText(ctx, c, v, W, H, sz[c.id]); // …puis on les réécrit (diagnostic : __vxNoText)
 
 }
 /* textes encore à recolorer à l'ancienne (police non disponible pour eux) */
